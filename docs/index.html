@@ -1,0 +1,1855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OddSockets Go SDK Documentation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <style>
+        :root {
+            --color-bg: #fafafa;
+            --color-surface: #ffffff;
+            --color-border: #e5e7eb;
+            --color-text-primary: #111827;
+            --color-text-secondary: #6b7280;
+            --color-text-muted: #9ca3af;
+            --color-accent: #00add8;
+            --color-accent-light: #e0f7ff;
+            --spacing-xs: 0.25rem;
+            --spacing-sm: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --spacing-2xl: 3rem;
+            --border-radius: 8px;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--color-text-primary);
+            background: var(--color-bg);
+            font-size: 16px;
+        }
+
+        /* Layout Container - Flexbox Solution */
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+       
+        .topheader {
+            text-align: center;
+            margin-bottom: 0.15rem;
+        }       
+            
+        .topheader h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1a202c;
+            margin-bottom: 0.15rem;
+        }   
+            
+        .topheader p {
+            font-size: 1.125rem;
+            color: #718096;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+            
+        .logo {
+            padding-top: 5px;
+            padding-left: 25px;
+            font-size: 1.375rem;
+            font-weight: 600;
+            margin-bottom: 0.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }   
+            
+        .logo i {
+            font-size: 1.75rem;
+        }               
+
+
+        .footer {
+            text-align: center;
+            padding: 2rem 0;
+            border-top: 1px solid #e2e8f0;
+            color: #718096;
+            font-size: 0.875rem;
+        }
+
+
+
+        /* Sidebar */
+        .sidebar {
+            flex: 0 0 280px;
+            background: var(--color-surface);
+            border-right: 1px solid var(--color-border);
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            padding: var(--spacing-xl) 0;
+        }
+
+        .sidebar-header {
+            padding: 0 var(--spacing-lg);
+            margin-bottom: var(--spacing-xl);
+        }
+
+        .sidebar-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--color-text-primary);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .nav-list {
+            list-style: none;
+        }
+
+        .nav-item {
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            padding: var(--spacing-sm) var(--spacing-lg);
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: var(--color-accent-light);
+            color: var(--color-accent);
+            border-left-color: var(--color-accent);
+        }
+
+        .nav-icon {
+            width: 16px;
+            text-align: center;
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            min-width: 0;
+            padding: var(--spacing-xl);
+            max-width: none;
+        }
+
+        /* Header */
+        .header {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: var(--spacing-2xl);
+            margin-bottom: var(--spacing-xl);
+            text-align: center;
+        }
+
+        .header-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--color-text-primary);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .header-subtitle {
+            font-size: 1.125rem;
+            color: var(--color-text-secondary);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .badges {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+        }
+
+        .badge {
+            background: var(--color-accent-light);
+            color: var(--color-accent);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+        }
+
+        /* Sections */
+        .section {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: var(--spacing-xl);
+            margin-bottom: var(--spacing-xl);
+        }
+
+        .section-title {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: var(--color-text-primary);
+            margin-bottom: var(--spacing-md);
+            padding-bottom: var(--spacing-md);
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .section-subtitle {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--color-text-primary);
+            margin: var(--spacing-xl) 0 var(--spacing-md) 0;
+        }
+
+        .section p {
+            color: var(--color-text-secondary);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .section ul {
+            color: var(--color-text-secondary);
+            margin: var(--spacing-md) 0;
+            padding-left: var(--spacing-lg);
+        }
+
+        .section li {
+            margin-bottom: var(--spacing-xs);
+        }
+
+        /* Feature Grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: var(--spacing-lg);
+            margin: var(--spacing-lg) 0;
+        }
+
+        .feature-card {
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: var(--spacing-lg);
+            transition: all 0.2s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature-card-title {
+            font-weight: 600;
+            color: var(--color-text-primary);
+            margin-bottom: var(--spacing-sm);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .feature-card p {
+            color: var(--color-text-secondary);
+            font-size: 0.875rem;
+            margin: 0;
+        }
+
+        /* Code Blocks */
+        .code-container {
+            margin: var(--spacing-lg) 0;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            border: 1px solid var(--color-border);
+        }
+
+        .code-header {
+            background: var(--color-bg);
+            padding: var(--spacing-sm) var(--spacing-md);
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .code-lang {
+            color: var(--color-text-muted);
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-copy {
+            background: var(--color-accent);
+            color: white;
+            border: none;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: calc(var(--border-radius) / 2);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+        }
+
+        .code-copy:hover {
+            background: #0099cc;
+        }
+
+        .code-container pre {
+            margin: 0;
+            padding: var(--spacing-md);
+            background: #1e293b;
+            overflow-x: auto;
+        }
+
+        .code-container code {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: var(--spacing-xs);
+            margin-bottom: var(--spacing-md);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            padding: var(--spacing-sm) var(--spacing-md);
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .tab-button.active {
+            color: var(--color-accent);
+            border-bottom-color: var(--color-accent);
+        }
+
+        .tab-button:hover {
+            color: var(--color-text-primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Quick Links */
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--spacing-lg);
+            margin: var(--spacing-lg) 0;
+        }
+
+        .quick-link {
+            display: block;
+            padding: var(--spacing-lg);
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            text-decoration: none;
+            color: var(--color-text-primary);
+            transition: all 0.2s ease;
+        }
+
+        .quick-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .quick-link-title {
+            font-weight: 600;
+            margin-bottom: var(--spacing-sm);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .quick-link p {
+            color: var(--color-text-secondary);
+            font-size: 0.875rem;
+            margin: 0;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-lg);
+            margin: var(--spacing-lg) 0;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: var(--spacing-lg);
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--color-text-primary);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .stat-label {
+            color: var(--color-text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Mobile Menu */
+        .mobile-menu-button {
+            display: none;
+            position: fixed;
+            top: var(--spacing-md);
+            left: var(--spacing-md);
+            z-index: 1000;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: var(--spacing-sm);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        /* Breadcrumb Navigation */
+        .breadcrumb-nav {
+            background: var(--color-surface);
+            border-bottom: 1px solid var(--color-border);
+            padding: var(--spacing-sm) 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .breadcrumb-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 var(--spacing-lg);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            font-size: 0.875rem;
+        }
+
+        .breadcrumb-link {
+            color: var(--color-accent);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: calc(var(--border-radius) / 2);
+            transition: all 0.2s ease;
+        }
+
+        .breadcrumb-link:hover {
+            background: var(--color-accent-light);
+            color: var(--color-accent);
+        }
+
+        .breadcrumb-separator {
+            color: var(--color-text-muted);
+            font-size: 0.75rem;
+        }
+
+        .breadcrumb-current {
+            color: var(--color-text-primary);
+            font-weight: 500;
+        }
+
+        /* Responsive Design - Clean Flexbox Solution */
+        @media (max-width: 1024px) {
+            .sidebar {
+                flex: 0 0 260px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .sidebar {
+                flex: 0 0 240px;
+            }
+            
+            .main {
+                padding: var(--spacing-lg);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .layout {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -280px;
+                width: 280px;
+                flex: none;
+                z-index: 1000;
+                transition: left 0.3s ease;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            }
+
+            .sidebar.open {
+                left: 0;
+            }
+
+            .mobile-menu-button {
+                display: block;
+            }
+
+            .mobile-overlay.active {
+                display: block;
+            }
+
+            .main {
+                flex: none;
+                width: 100%;
+                padding: var(--spacing-md);
+                padding-top: calc(var(--spacing-2xl) + 40px);
+            }
+
+            .header {
+                text-align: left;
+                padding: var(--spacing-lg);
+            }
+
+            .header-title {
+                font-size: 2rem;
+            }
+
+            .badges {
+                justify-content: flex-start;
+            }
+
+            .feature-grid,
+            .quick-links,
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                flex-wrap: wrap;
+            }
+
+            .code-header {
+                flex-direction: column;
+                gap: var(--spacing-sm);
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main {
+                padding: var(--spacing-sm);
+                padding-top: calc(var(--spacing-xl) + 40px);
+            }
+
+            .section {
+                padding: var(--spacing-md);
+            }
+
+            .header-title {
+                font-size: 1.75rem;
+            }
+        }
+
+        /* Prism Theme Override */
+        pre[class*="language-"] {
+            background: #1e293b !important;
+            color: #e2e8f0 !important;
+        }
+
+        .token.comment { color: #64748b !important; }
+        .token.string { color: #22d3ee !important; }
+        .token.keyword { color: #a78bfa !important; }
+        .token.function { color: #fb7185 !important; }
+        .token.number { color: #fbbf24 !important; }
+        .token.operator { color: #e2e8f0 !important; }
+    </style>
+</head>
+<body>
+    <button class="mobile-menu-button" onclick="toggleMobileMenu()">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileMenu()"></div>
+            
+    <div class="topheader">
+         
+            <div class="logo">
+                <a href="/">
+                     <img src="https://prodmedia.tyga.host/public/tyga.cloud/landing/oddsockets.com/oddsockets-logo-words-white-256.png" alt="OddSockets" class="logo">
+                </a>  
+            </div>
+    </div>
+
+    <!-- Breadcrumb Navigation -->
+    <nav class="breadcrumb-nav">
+        <div class="breadcrumb-container">
+            <a href="../../docs-index.html" class="breadcrumb-link">
+                <i class="fas fa-home"></i>
+                OddSockets Documentation
+            </a>
+            <i class="fas fa-chevron-right breadcrumb-separator"></i>
+            <span class="breadcrumb-current">Go SDK</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title">
+                    <i class="fas fa-book"></i>
+                    Documentation
+                </h2>
+            </div>
+            <nav>
+                <ul class="nav-list">
+                    <li class="nav-item">
+                        <a href="#overview" class="nav-link active">
+                            <i class="fas fa-eye nav-icon"></i>
+                            Overview
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#installation" class="nav-link">
+                            <i class="fas fa-download nav-icon"></i>
+                            Installation
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#quick-start" class="nav-link">
+                            <i class="fas fa-rocket nav-icon"></i>
+                            Quick Start
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#configuration" class="nav-link">
+                            <i class="fas fa-cog nav-icon"></i>
+                            Configuration
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#examples" class="nav-link">
+                            <i class="fas fa-code nav-icon"></i>
+                            Examples
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#performance" class="nav-link">
+                            <i class="fas fa-chart-line nav-icon"></i>
+                            Performance
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#frameworks" class="nav-link">
+                            <i class="fas fa-layer-group nav-icon"></i>
+                            Frameworks
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main">
+            <header class="header">
+                <h1 class="header-title">OddSockets Go SDK</h1>
+                <p class="header-subtitle">Official Go SDK for OddSockets real-time messaging platform</p>
+                <div class="badges">
+                    <span class="badge">
+                        <i class="fab fa-golang"></i>
+                        Go 1.19+
+                    </span>
+                    <span class="badge">
+                        <i class="fas fa-cube"></i>
+                        Go Modules
+                    </span>
+                    <span class="badge">
+                        <i class="fas fa-bolt"></i>
+                        High Performance
+                    </span>
+                    <span class="badge">
+                        <i class="fas fa-shield-alt"></i>
+                        Type Safe
+                    </span>
+                    <span class="badge">
+                        <i class="fas fa-sync-alt"></i>
+                        Goroutine Safe
+                    </span>
+                </div>
+            </header>
+
+            <section id="overview" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-eye"></i>
+                    Overview & Features
+                </h2>
+                <p>The OddSockets Go SDK provides a powerful, idiomatic Go interface for real-time messaging with full goroutine safety and excellent performance characteristics.</p>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4 class="feature-card-title">
+                            <i class="fab fa-golang"></i>
+                            Idiomatic Go
+                        </h4>
+                        <p>Follows Go conventions with proper error handling, context support, and clean APIs.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="feature-card-title">
+                            <i class="fas fa-sync-alt"></i>
+                            Goroutine Safe
+                        </h4>
+                        <p>Thread-safe operations with proper synchronization for concurrent usage.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="feature-card-title">
+                            <i class="fas fa-shield-alt"></i>
+                            Type Safety
+                        </h4>
+                        <p>Strong typing with comprehensive struct definitions and interface contracts.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="feature-card-title">
+                            <i class="fas fa-bolt"></i>
+                            High Performance
+                        </h4>
+                        <p>Optimized for low latency with efficient WebSocket connections and minimal allocations.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="feature-card-title">
+                            <i class="fas fa-dollar-sign"></i>
+                            Cost Effective
+                        </h4>
+                        <p>No per-message pricing, industry-standard 32KB message limits, transparent pricing.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="feature-card-title">
+                            <i class="fas fa-cogs"></i>
+                            Context Support
+                        </h4>
+                        <p>Full context.Context support for cancellation, timeouts, and request tracing.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="installation" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-download"></i>
+                    Installation
+                </h2>
+                
+                <div class="tabs">
+                    <button class="tab-button active" onclick="showTab('go-get')">go get</button>
+                    <button class="tab-button" onclick="showTab('go-mod')">go.mod</button>
+                    <button class="tab-button" onclick="showTab('manual')">Manual</button>
+                </div>
+
+                <div id="go-get" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-lang">bash</span>
+                            <button class="code-copy" onclick="copyCode(this)">
+                                <i class="fas fa-copy"></i>
+                                Copy
+                            </button>
+                        </div>
+                        <pre><code class="language-bash">go get github.com/oddsocketsai/go-sdk</code></pre>
+                    </div>
+                </div>
+
+                <div id="go-mod" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-lang">go</span>
+                            <button class="code-copy" onclick="copyCode(this)">
+                                <i class="fas fa-copy"></i>
+                                Copy
+                            </button>
+                        </div>
+                        <pre><code class="language-go">module your-app
+
+go 1.19
+
+require (
+    github.com/oddsocketsai/go-sdk v1.0.0
+)</code></pre>
+                    </div>
+                </div>
+
+                <div id="manual" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-lang">bash</span>
+                            <button class="code-copy" onclick="copyCode(this)">
+                                <i class="fas fa-copy"></i>
+                                Copy
+                            </button>
+                        </div>
+                        <pre><code class="language-bash">git clone https://github.com/oddsocketsai/go-sdk.git
+cd go-sdk
+go mod tidy</code></pre>
+                    </div>
+                </div>
+            </section>
+
+            <section id="quick-start" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-rocket"></i>
+                    Quick Start
+                </h2>
+                
+                <h3 class="section-subtitle">Basic Usage</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+func main() {
+    // Create client
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    // Connect to platform
+    ctx := context.Background()
+    if err := client.Connect(ctx); err != nil {
+        log.Fatal(err)
+    }
+
+    // Get channel
+    channel := client.Channel("my-channel")
+
+    // Subscribe to messages
+    err = channel.Subscribe(ctx, func(msg *oddsockets.Message) {
+        fmt.Printf("Received: %+v\n", msg)
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Publish a message
+    err = channel.Publish(ctx, "Hello, World!")
+    if err != nil {
+        log.Fatal(err)
+    }
+}</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">With Error Handling</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+    
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+func main() {
+    // Create client with options
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey:            "ak_live_1234567890abcdef",
+        UserID:            "user123",
+        AutoConnect:       true,
+        ReconnectAttempts: 5,
+        HeartbeatInterval: 30 * time.Second,
+    })
+    if err != nil {
+        log.Fatal("Failed to create client:", err)
+    }
+    defer client.Close()
+
+    // Set up event handlers
+    client.OnConnecting(func() {
+        fmt.Println("🔄 Connecting...")
+    })
+    
+    client.OnConnected(func() {
+        fmt.Println("✅ Connected!")
+    })
+    
+    client.OnDisconnected(func(reason string) {
+        fmt.Printf("❌ Disconnected: %s\n", reason)
+    })
+    
+    client.OnError(func(err error) {
+        fmt.Printf("❌ Error: %v\n", err)
+    })
+
+    // Connect with timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    
+    if err := client.Connect(ctx); err != nil {
+        log.Fatal("Failed to connect:", err)
+    }
+
+    // Get channel and subscribe
+    channel := client.Channel("my-channel")
+    
+    err = channel.Subscribe(ctx, func(msg *oddsockets.Message) {
+        fmt.Printf("📨 Message: %s from %s\n", msg.Data, msg.UserID)
+    }, &oddsockets.SubscribeOptions{
+        EnablePresence: true,
+        RetainHistory:  true,
+        MaxHistory:     50,
+    })
+    if err != nil {
+        log.Fatal("Failed to subscribe:", err)
+    }
+
+    // Publish with metadata
+    err = channel.Publish(ctx, map[string]interface{}{
+        "text": "Hello from Go SDK!",
+        "user": "gopher",
+    }, &oddsockets.PublishOptions{
+        TTL:      3600,
+        Metadata: map[string]interface{}{"priority": "high"},
+    })
+    if err != nil {
+        log.Fatal("Failed to publish:", err)
+    }
+
+    // Keep the program running
+    select {}
+}</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Concurrent Usage</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "sync"
+    "time"
+    
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+func main() {
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    ctx := context.Background()
+    if err := client.Connect(ctx); err != nil {
+        log.Fatal(err)
+    }
+
+    var wg sync.WaitGroup
+    
+    // Start multiple goroutines for concurrent operations
+    for i := 0; i < 10; i++ {
+        wg.Add(1)
+        go func(id int) {
+            defer wg.Done()
+            
+            channelName := fmt.Sprintf("channel-%d", id)
+            channel := client.Channel(channelName)
+            
+            // Subscribe
+            err := channel.Subscribe(ctx, func(msg *oddsockets.Message) {
+                fmt.Printf("Channel %s received: %+v\n", channelName, msg)
+            })
+            if err != nil {
+                log.Printf("Failed to subscribe to %s: %v", channelName, err)
+                return
+            }
+            
+            // Publish messages
+            for j := 0; j < 5; j++ {
+                message := fmt.Sprintf("Message %d from goroutine %d", j, id)
+                if err := channel.Publish(ctx, message); err != nil {
+                    log.Printf("Failed to publish to %s: %v", channelName, err)
+                }
+                time.Sleep(100 * time.Millisecond)
+            }
+        }(i)
+    }
+    
+    wg.Wait()
+}</code></pre>
+                </div>
+            </section>
+
+            <section id="configuration" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-cog"></i>
+                    Configuration
+                </h2>
+                
+                <h3 class="section-subtitle">Client Configuration</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">client, err := oddsockets.NewClient(&oddsockets.Config{
+    APIKey:            "your-api-key",           // Required: Your OddSockets API key
+    UserID:            "user-id",                // Optional: User identifier
+    AutoConnect:       true,                     // Optional: Auto-connect on creation
+    ReconnectAttempts: 5,                        // Optional: Max reconnection attempts
+    HeartbeatInterval: 30 * time.Second,         // Optional: Heartbeat interval
+    ConnectTimeout:    15 * time.Second,         // Optional: Connection timeout
+    Logger:            log.New(os.Stdout, "", 0), // Optional: Custom logger
+})</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Channel Options</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">// Subscribe with options
+err = channel.Subscribe(ctx, messageHandler, &oddsockets.SubscribeOptions{
+    EnablePresence: true,                        // Enable presence tracking
+    RetainHistory:  true,                        // Retain message history
+    MaxHistory:     100,                         // Maximum history size
+    Filter:         "user.premium == true",      // Message filter expression
+})
+
+// Publish with options
+err = channel.Publish(ctx, message, &oddsockets.PublishOptions{
+    TTL:           3600,                         // Time to live (seconds)
+    Metadata:      map[string]interface{}{       // Additional metadata
+        "priority": "high",
+        "source":   "go-sdk",
+    },
+    StoreInHistory: true,                        // Store in message history
+})</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Context Usage</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">// With timeout
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+
+// With cancellation
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+// With deadline
+deadline := time.Now().Add(5 * time.Minute)
+ctx, cancel := context.WithDeadline(context.Background(), deadline)
+defer cancel()
+
+// With values for tracing
+ctx = context.WithValue(ctx, "requestID", "req-123")
+ctx = context.WithValue(ctx, "userID", "user-456")</code></pre>
+                </div>
+            </section>
+
+            <section id="examples" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-code"></i>
+                    Examples
+                </h2>
+                
+                <p>Explore comprehensive examples demonstrating the OddSockets Go SDK in action:</p>
+                
+                <div class="quick-links">
+                    <a href="../examples/index.html" class="quick-link">
+                        <h4 class="quick-link-title">
+                            <i class="fas fa-folder-open"></i>
+                            View All Examples
+                        </h4>
+                        <p>Browse all available examples including basic usage, concurrent operations, and production patterns</p>
+                    </a>
+                </div>
+            </section>
+
+            <section id="performance" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-chart-line"></i>
+                    Performance & Compatibility
+                </h2>
+                <p>OddSockets Go SDK delivers excellent performance with broad Go version compatibility:</p>
+                
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                    <div class="stat-card">
+                        <div class="stat-number">&lt;50ms</div>
+                        <div class="stat-label">Latency</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">99.9%</div>
+                        <div class="stat-label">Uptime</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">32KB</div>
+                        <div class="stat-label">Max Message</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">1M+</div>
+                        <div class="stat-label">Messages/sec</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-xl); margin-top: var(--spacing-xl);">
+                    <div>
+                        <h3 class="section-subtitle">Go Version Support</h3>
+                        <ul style="margin: 0;">
+                            <li>Go 1.19+ (recommended)</li>
+                            <li>Go 1.18+ (supported)</li>
+                            <li>Go Modules required</li>
+                            <li>CGO not required</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="section-subtitle">Platform Support</h3>
+                        <ul style="margin: 0;">
+                            <li>Linux (amd64, arm64)</li>
+                            <li>macOS (amd64, arm64)</li>
+                            <li>Windows (amd64)</li>
+                            <li>Docker containers</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="frameworks" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-layer-group"></i>
+                    Framework Integrations
+                </h2>
+                
+                <p>The OddSockets Go SDK works seamlessly with popular Go frameworks and libraries. Here are examples showing integration patterns:</p>
+                
+                <h3 class="section-subtitle">Gin Web Framework</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "net/http"
+    
+    "github.com/gin-gonic/gin"
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+type ChatService struct {
+    client *oddsockets.Client
+}
+
+func NewChatService() (*ChatService, error) {
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+    })
+    if err != nil {
+        return nil, err
+    }
+    
+    if err := client.Connect(context.Background()); err != nil {
+        return nil, err
+    }
+    
+    return &ChatService{client: client}, nil
+}
+
+func (cs *ChatService) SendMessage(c *gin.Context) {
+    var req struct {
+        Channel string      `json:"channel" binding:"required"`
+        Message interface{} `json:"message" binding:"required"`
+    }
+    
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    
+    channel := cs.client.Channel(req.Channel)
+    if err := channel.Publish(c.Request.Context(), req.Message); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusOK, gin.H{"status": "sent"})
+}
+
+func main() {
+    chatService, err := NewChatService()
+    if err != nil {
+        panic(err)
+    }
+    
+    r := gin.Default()
+    r.POST("/send", chatService.SendMessage)
+    r.Run(":8080")
+}</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Echo Framework</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "net/http"
+    
+    "github.com/labstack/echo/v4"
+    "github.com/labstack/echo/v4/middleware"
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+type Server struct {
+    echo   *echo.Echo
+    client *oddsockets.Client
+}
+
+func NewServer() (*Server, error) {
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+    })
+    if err != nil {
+        return nil, err
+    }
+    
+    if err := client.Connect(context.Background()); err != nil {
+        return nil, err
+    }
+    
+    e := echo.New()
+    e.Use(middleware.Logger())
+    e.Use(middleware.Recover())
+    
+    server := &Server{
+        echo:   e,
+        client: client,
+    }
+    
+    server.setupRoutes()
+    return server, nil
+}
+
+func (s *Server) setupRoutes() {
+    s.echo.POST("/channels/:channel/messages", s.publishMessage)
+    s.echo.GET("/channels/:channel/history", s.getHistory)
+    s.echo.GET("/channels/:channel/presence", s.getPresence)
+}
+
+func (s *Server) publishMessage(c echo.Context) error {
+    channel := c.Param("channel")
+    
+    var message interface{}
+    if err := c.Bind(&message); err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+    }
+    
+    ch := s.client.Channel(channel)
+    if err := ch.Publish(c.Request().Context(), message); err != nil {
+        return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+    }
+    
+    return c.JSON(http.StatusOK, map[string]string{"status": "published"})
+}
+
+func (s *Server) getHistory(c echo.Context) error {
+    channel := c.Param("channel")
+    
+    ch := s.client.Channel(channel)
+    history, err := ch.GetHistory(c.Request().Context(), &oddsockets.HistoryOptions{
+        Count: 50,
+    })
+    if err != nil {
+        return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+    }
+    
+    return c.JSON(http.StatusOK, history)
+}
+
+func (s *Server) getPresence(c echo.Context) error {
+    channel := c.Param("channel")
+    
+    ch := s.client.Channel(channel)
+    presence, err := ch.GetPresence(c.Request().Context())
+    if err != nil {
+        return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+    }
+    
+    return c.JSON(http.StatusOK, presence)
+}
+
+func main() {
+    server, err := NewServer()
+    if err != nil {
+        panic(err)
+    }
+    
+    server.echo.Logger.Fatal(server.echo.Start(":8080"))
+}</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Fiber Framework</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "log"
+    
+    "github.com/gofiber/fiber/v2"
+    "github.com/gofiber/fiber/v2/middleware/cors"
+    "github.com/gofiber/fiber/v2/middleware/logger"
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+func main() {
+    // Initialize OddSockets client
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+    
+    if err := client.Connect(context.Background()); err != nil {
+        log.Fatal(err)
+    }
+    
+    // Initialize Fiber app
+    app := fiber.New(fiber.Config{
+        ErrorHandler: func(c *fiber.Ctx, err error) error {
+            return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+                "error": err.Error(),
+            })
+        },
+    })
+    
+    // Middleware
+    app.Use(logger.New())
+    app.Use(cors.New())
+    
+    // Routes
+    app.Post("/channels/:channel/publish", func(c *fiber.Ctx) error {
+        channel := c.Params("channel")
+        
+        var body map[string]interface{}
+        if err := c.BodyParser(&body); err != nil {
+            return err
+        }
+        
+        ch := client.Channel(channel)
+        if err := ch.Publish(context.Background(), body); err != nil {
+            return err
+        }
+        
+        return c.JSON(fiber.Map{"status": "published"})
+    })
+    
+    app.Get("/channels/:channel/subscribe", func(c *fiber.Ctx) error {
+        channel := c.Params("channel")
+        
+        ch := client.Channel(channel)
+        
+        // Set up SSE headers
+        c.Set("Content-Type", "text/event-stream")
+        c.Set("Cache-Control", "no-cache")
+        c.Set("Connection", "keep-alive")
+        
+        // Subscribe and stream messages
+        err := ch.Subscribe(context.Background(), func(msg *oddsockets.Message) {
+            c.WriteString("data: " + string(msg.Data) + "\n\n")
+        })
+        
+        return err
+    })
+    
+    log.Fatal(app.Listen(":8080"))
+}</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">gRPC Integration</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "log"
+    "net"
+    
+    "google.golang.org/grpc"
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+type ChatServer struct {
+    client *oddsockets.Client
+    // UnimplementedChatServiceServer
+}
+
+func NewChatServer() (*ChatServer, error) {
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+    })
+    if err != nil {
+        return nil, err
+    }
+    
+    if err := client.Connect(context.Background()); err != nil {
+        return nil, err
+    }
+    
+    return &ChatServer{client: client}, nil
+}
+
+func (s *ChatServer) SendMessage(ctx context.Context, req *SendMessageRequest) (*SendMessageResponse, error) {
+    channel := s.client.Channel(req.Channel)
+    
+    err := channel.Publish(ctx, map[string]interface{}{
+        "text":   req.Message,
+        "userId": req.UserId,
+    })
+    if err != nil {
+        return nil, err
+    }
+    
+    return &SendMessageResponse{Success: true}, nil
+}
+
+func (s *ChatServer) Subscribe(req *SubscribeRequest, stream ChatService_SubscribeServer) error {
+    channel := s.client.Channel(req.Channel)
+    
+    return channel.Subscribe(stream.Context(), func(msg *oddsockets.Message) {
+        response := &MessageEvent{
+            Channel:   req.Channel,
+            Message:   string(msg.Data),
+            UserId:    msg.UserID,
+            Timestamp: msg.Timestamp.Unix(),
+        }
+        
+        if err := stream.Send(response); err != nil {
+            log.Printf("Failed to send message: %v", err)
+        }
+    })
+}
+
+func main() {
+    server, err := NewChatServer()
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    lis, err := net.Listen("tcp", ":50051")
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    s := grpc.NewServer()
+    RegisterChatServiceServer(s, server)
+    
+    log.Println("gRPC server listening on :50051")
+    log.Fatal(s.Serve(lis))
+}</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Worker Pool Pattern</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "sync"
+    "time"
+    
+    "github.com/oddsocketsai/go-sdk/oddsockets"
+)
+
+type MessageProcessor struct {
+    client   *oddsockets.Client
+    workers  int
+    jobQueue chan *oddsockets.Message
+    wg       sync.WaitGroup
+}
+
+func NewMessageProcessor(workers int) (*MessageProcessor, error) {
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+    })
+    if err != nil {
+        return nil, err
+    }
+    
+    if err := client.Connect(context.Background()); err != nil {
+        return nil, err
+    }
+    
+    return &MessageProcessor{
+        client:   client,
+        workers:  workers,
+        jobQueue: make(chan *oddsockets.Message, 100),
+    }, nil
+}
+
+func (mp *MessageProcessor) Start(ctx context.Context) {
+    // Start worker goroutines
+    for i := 0; i < mp.workers; i++ {
+        mp.wg.Add(1)
+        go mp.worker(ctx, i)
+    }
+    
+    // Subscribe to incoming messages
+    channel := mp.client.Channel("work-queue")
+    err := channel.Subscribe(ctx, func(msg *oddsockets.Message) {
+        select {
+        case mp.jobQueue <- msg:
+        case <-ctx.Done():
+            return
+        default:
+            log.Println("Job queue full, dropping message")
+        }
+    })
+    if err != nil {
+        log.Fatal("Failed to subscribe:", err)
+    }
+}
+
+func (mp *MessageProcessor) worker(ctx context.Context, id int) {
+    defer mp.wg.Done()
+    
+    for {
+        select {
+        case msg := <-mp.jobQueue:
+            mp.processMessage(ctx, id, msg)
+        case <-ctx.Done():
+            return
+        }
+    }
+}
+
+func (mp *MessageProcessor) processMessage(ctx context.Context, workerID int, msg *oddsockets.Message) {
+    fmt.Printf("Worker %d processing message: %s\n", workerID, msg.Data)
+    
+    // Simulate work
+    time.Sleep(100 * time.Millisecond)
+    
+    // Send result to results channel
+    resultChannel := mp.client.Channel("results")
+    result := map[string]interface{}{
+        "originalMessage": string(msg.Data),
+        "processedBy":     workerID,
+        "processedAt":     time.Now().Unix(),
+    }
+    
+    if err := resultChannel.Publish(ctx, result); err != nil {
+        log.Printf("Worker %d failed to publish result: %v", workerID, err)
+    }
+}
+
+func (mp *MessageProcessor) Stop() {
+    close(mp.jobQueue)
+    mp.wg.Wait()
+    mp.client.Close()
+}
+
+func main() {
+    processor, err := NewMessageProcessor(5)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer processor.Stop()
+    
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    
+    processor.Start(ctx)
+    
+    // Keep running
+    select {}
+}</code></pre>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+
+        <div class="footer">
+            <p>&copy; 2025 Tyga.Cloud Ltd. oddsockets.com is a division of Tyga.Cloud Ltd. All rights reserved.</p>
+        </div>
+
+    <script>
+        // Copy code functionality
+        function copyCode(button) {
+            const codeContainer = button.closest('.code-container');
+            const codeElement = codeContainer.querySelector('code');
+            
+            if (codeElement) {
+                const code = codeElement.textContent;
+                navigator.clipboard.writeText(code).then(() => {
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                    }, 2000);
+                }).catch(() => {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = code;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                    }, 2000);
+                });
+            }
+        }
+
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+        }
+
+        // Mobile menu functionality
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('active');
+            
+            // Prevent body scroll when menu is open
+            if (sidebar.classList.contains('open')) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = '';
+            }
+        }
+
+        function closeMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // Navigation functionality
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+                
+                if (targetElement) {
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                    
+                    // Update active navigation
+                    document.querySelectorAll('.nav-link').forEach(navLink => {
+                        navLink.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    
+                    // Close mobile menu if open
+                    closeMobileMenu();
+                }
+            });
+        });
+
+        // Update active navigation on scroll
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('.section');
+            const navLinks = document.querySelectorAll('.nav-link');
+            
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (scrollY >= (sectionTop - 200)) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) {
+                closeMobileMenu();
+            }
+        });
+
+        // Initialize Prism.js
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightAll();
+            }
+        });
+    </script>
+</body>
+</html>
