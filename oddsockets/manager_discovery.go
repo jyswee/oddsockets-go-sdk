@@ -14,7 +14,7 @@ type ManagerDiscovery struct {
 // NewManagerDiscovery creates a new manager discovery instance
 func NewManagerDiscovery() *ManagerDiscovery {
 	return &ManagerDiscovery{
-		managerURL: "https://manager1.oddsockets.tyga.network",
+		managerURL: "https://connect.oddsockets.tyga.network",
 	}
 }
 

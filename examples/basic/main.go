@@ -16,7 +16,7 @@ func main() {
 	// Create client with configuration
 	client, err := oddsockets.NewClient(&oddsockets.Config{
 		APIKey:     "ak_live_1234567890abcdef",
-		ManagerURL: "https://manager1.oddsockets.tyga.network",
+		ManagerURL: "https://connect.oddsockets.tyga.network",
 		UserID:     "go-demo-user",
 		AutoConnect: false, // Don't auto-connect for this example
 	})

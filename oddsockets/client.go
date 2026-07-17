@@ -74,7 +74,7 @@ func NewClient(config *Config) (*Client, error) {
 
 	// Set defaults
 	if config.ManagerURL == "" {
-		config.ManagerURL = "https://manager1.oddsockets.tyga.network"
+		config.ManagerURL = "https://connect.oddsockets.tyga.network"
 	}
 
 	if config.UserID == "" {

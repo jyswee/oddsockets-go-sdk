@@ -42,7 +42,7 @@ func main() {
     // Create client
     client, err := oddsockets.NewClient(&oddsockets.Config{
         APIKey:     "ak_live_1234567890abcdef",
-        ManagerURL: "https://manager1.oddsockets.tyga.network",
+        ManagerURL: "https://connect.oddsockets.tyga.network",
         UserID:     "go-demo-user",
     })
     if err != nil {
@@ -363,7 +363,7 @@ spec:
               name: oddsockets-secret
               key: api-key
         - name: ODDSOCKETS_MANAGER_URL
-          value: "https://manager1.oddsockets.tyga.network"
+          value: "https://connect.oddsockets.tyga.network"
 ```
 
 ## Other SDKs
