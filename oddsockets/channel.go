@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // validateMessageSize validates message size against limits
@@ -24,17 +22,17 @@ func validateMessageSize(message interface{}) error {
 		}
 		messageStr = string(messageBytes)
 	}
-	
+
 	messageSize := len([]byte(messageStr))
-	
+
 	if messageSize > MaxMessageSize {
 		return fmt.Errorf(
 			"message size (%dKB) exceeds maximum allowed size of %dKB. "+
-				"This limit matches industry standards (PubNub, Socket.IO) for reliable real-time messaging",
+				"This limit matches industry standards for reliable real-time messaging",
 			messageSize/1024, MaxMessageSizeKB,
 		)
 	}
-	
+
 	return nil
 }
 
@@ -44,12 +42,12 @@ type Channel struct {
 	client *Client
 
 	// Subscription state
-	subscribed      bool
-	messageChan     chan *Message
-	subscribeOpts   *SubscribeOptions
-	messageHistory  []*Message
-	presenceUsers   []string
-	mu              sync.RWMutex
+	subscribed     bool
+	messageChan    chan *Message
+	subscribeOpts  *SubscribeOptions
+	messageHistory []*Message
+	presenceUsers  []string
+	mu             sync.RWMutex
 
 	// Context for cancellation
 	ctx    context.Context
@@ -71,7 +69,13 @@ func newChannel(name string, client *Client) *Channel {
 	}
 }
 
-// Subscribe subscribes to messages on this channel
+// channelMatch reports whether a worker response payload targets this channel.
+func (ch *Channel) channelMatch(m map[string]interface{}) bool {
+	name, _ := m["channel"].(string)
+	return name == ch.name
+}
+
+// Subscribe subscribes to messages on this channel via the live worker.
 func (ch *Channel) Subscribe(ctx context.Context, messageChan chan *Message, options *SubscribeOptions) error {
 	if !ch.client.IsConnected() {
 		return fmt.Errorf("not connected to OddSockets")
@@ -82,62 +86,61 @@ func (ch *Channel) Subscribe(ctx context.Context, messageChan chan *Message, opt
 	}
 
 	ch.mu.Lock()
-	defer ch.mu.Unlock()
-
 	if ch.subscribed {
+		ch.mu.Unlock()
 		log.Printf("Channel '%s' already subscribed", ch.name)
 		return nil
 	}
-
-	// Store subscription details
 	ch.messageChan = messageChan
 	ch.subscribeOpts = options
 	if ch.subscribeOpts == nil {
 		ch.subscribeOpts = &SubscribeOptions{}
 	}
+	opts := ch.subscribeOpts
+	ch.mu.Unlock()
 
-	// Simulate subscription process
-	select {
-	case <-time.After(50 * time.Millisecond): // Simulate network delay
-		ch.subscribed = true
-		log.Printf("Subscribed to channel: %s", ch.name)
-
-		// If presence is enabled, add current user
-		if ch.subscribeOpts.EnablePresence {
-			ch.presenceUsers = append(ch.presenceUsers, ch.client.GetUserID())
-		}
-
-		// Start message handling goroutine
-		go ch.handleMessages(ctx)
-
-		// Simulate receiving initial messages
-		go ch.simulateInitialMessages()
-
-		return nil
-
-	case <-ctx.Done():
-		return ctx.Err()
+	payload := map[string]interface{}{
+		"channel": ch.name,
+		"options": subscribeOptionsPayload(opts),
 	}
+
+	if _, err := ch.client.socket.request("subscribe", payload, "subscribed", ch.channelMatch, 10*time.Second); err != nil {
+		return err
+	}
+
+	ch.mu.Lock()
+	ch.subscribed = true
+	if opts.EnablePresence {
+		ch.presenceUsers = appendUnique(ch.presenceUsers, ch.client.GetUserID())
+	}
+	ch.mu.Unlock()
+
+	log.Printf("Subscribed to channel: %s", ch.name)
+	return nil
 }
 
-// Unsubscribe unsubscribes from messages on this channel
+// Unsubscribe unsubscribes from messages on this channel.
 func (ch *Channel) Unsubscribe() error {
 	ch.mu.Lock()
-	defer ch.mu.Unlock()
+	subscribed := ch.subscribed
+	ch.mu.Unlock()
 
-	if !ch.subscribed {
+	if !subscribed {
 		log.Printf("Channel '%s' not subscribed", ch.name)
 		return nil
 	}
 
-	// Simulate unsubscription process
-	time.Sleep(50 * time.Millisecond) // Simulate network delay
+	if ch.client.socket != nil {
+		if _, err := ch.client.socket.request("unsubscribe", map[string]interface{}{
+			"channel": ch.name,
+		}, "unsubscribed", ch.channelMatch, 5*time.Second); err != nil {
+			log.Printf("Unsubscribe for '%s' did not confirm: %v", ch.name, err)
+		}
+	}
 
+	ch.mu.Lock()
 	ch.subscribed = false
 	ch.messageChan = nil
-	ch.subscribeOpts = nil
-
-	// Remove from presence
 	userID := ch.client.GetUserID()
 	for i, user := range ch.presenceUsers {
 		if user == userID {
@@ -145,161 +148,113 @@ func (ch *Channel) Unsubscribe() error {
 			break
 		}
 	}
+	ch.mu.Unlock()
 
 	ch.cancel()
 	log.Printf("Unsubscribed from channel: %s", ch.name)
-
 	return nil
 }
 
-// Publish publishes a message to this channel
+// Publish publishes a message to this channel and returns the worker ack.
 func (ch *Channel) Publish(ctx context.Context, message interface{}, options *PublishOptions) (*PublishResult, error) {
 	if !ch.client.IsConnected() {
 		return nil, fmt.Errorf("not connected to OddSockets")
 	}
 
-	// Validate message size before publishing
 	if err := validateMessageSize(message); err != nil {
 		return nil, err
 	}
 
-	// Create message object
-	msg := &Message{
-		ID:        fmt.Sprintf("msg_%s", uuid.New().String()[:12]),
-		Channel:   ch.name,
-		Data:      message,
+	pubOpts := map[string]interface{}{}
+	if options != nil {
+		if options.TTL > 0 {
+			pubOpts["ttl"] = options.TTL
+		}
+		if options.Metadata != nil {
+			pubOpts["metadata"] = options.Metadata
+		}
+		if options.StoreInHistory {
+			pubOpts["storeInHistory"] = true
+		}
+	}
+
+	payload := map[string]interface{}{
+		"channel": ch.name,
+		"message": message,
+		"options": pubOpts,
+	}
+
+	resp, err := ch.client.socket.request("publish", payload, "published", ch.channelMatch, 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	messageID := stringField(resp, "messageId")
+	if messageID == "" {
+		messageID = stringField(resp, "message_id")
+	}
+
+	log.Printf("Published message to channel '%s'", ch.name)
+	return &PublishResult{
+		MessageID: messageID,
 		Timestamp: time.Now(),
-		UserID:    ch.client.GetUserID(),
-	}
-
-	if options != nil && options.Metadata != nil {
-		msg.Metadata = options.Metadata
-	}
-
-	// Simulate publishing process
-	select {
-	case <-time.After(20 * time.Millisecond): // Simulate network delay
-		// Store in history if requested
-		ch.mu.Lock()
-		if (options != nil && options.StoreInHistory) ||
-			(ch.subscribeOpts != nil && ch.subscribeOpts.RetainHistory) {
-			ch.messageHistory = append(ch.messageHistory, msg)
-			// Keep only last 100 messages
-			if len(ch.messageHistory) > 100 {
-				ch.messageHistory = ch.messageHistory[len(ch.messageHistory)-100:]
-			}
-		}
-
-		// Deliver to local subscriber if subscribed
-		if ch.subscribed && ch.messageChan != nil {
-			go ch.deliverMessage(msg)
-		}
-		ch.mu.Unlock()
-
-		log.Printf("Published message to channel '%s': %v", ch.name, message)
-
-		return &PublishResult{
-			MessageID: msg.ID,
-			Timestamp: msg.Timestamp,
-			Channel:   ch.name,
-			Success:   true,
-		}, nil
-
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+		Channel:   ch.name,
+		Success:   true,
+	}, nil
 }
 
-// GetHistory retrieves message history for this channel
+// GetHistory retrieves message history for this channel from the worker.
 func (ch *Channel) GetHistory(ctx context.Context, options *HistoryOptions) ([]*Message, error) {
 	if !ch.client.IsConnected() {
 		return nil, fmt.Errorf("not connected to OddSockets")
 	}
 
-	// Simulate API call delay
-	select {
-	case <-time.After(100 * time.Millisecond):
-		ch.mu.RLock()
-		messages := make([]*Message, len(ch.messageHistory))
-		copy(messages, ch.messageHistory)
-		ch.mu.RUnlock()
-
-		// Apply filters if specified
-		if options != nil {
-			if options.Start != nil {
-				filtered := make([]*Message, 0)
-				for _, msg := range messages {
-					if msg.Timestamp.After(*options.Start) || msg.Timestamp.Equal(*options.Start) {
-						filtered = append(filtered, msg)
-					}
-				}
-				messages = filtered
-			}
-
-			if options.End != nil {
-				filtered := make([]*Message, 0)
-				for _, msg := range messages {
-					if msg.Timestamp.Before(*options.End) || msg.Timestamp.Equal(*options.End) {
-						filtered = append(filtered, msg)
-					}
-				}
-				messages = filtered
-			}
-
-			// Apply limit
-			if options.Limit > 0 && len(messages) > options.Limit {
-				if options.Reverse {
-					// Take last N messages
-					messages = messages[len(messages)-options.Limit:]
-				} else {
-					// Take first N messages
-					messages = messages[:options.Limit]
-				}
-			}
-
-			// Reverse if requested
-			if options.Reverse {
-				for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
-					messages[i], messages[j] = messages[j], messages[i]
-				}
-			}
+	payload := map[string]interface{}{"channel": ch.name}
+	if options != nil {
+		if options.Limit > 0 {
+			payload["count"] = options.Limit
 		}
-
-		log.Printf("Retrieved %d messages from channel '%s' history", len(messages), ch.name)
-		return messages, nil
-
-	case <-ctx.Done():
-		return nil, ctx.Err()
+		if options.Start != nil {
+			payload["start"] = options.Start.Format(time.RFC3339)
+		}
+		if options.End != nil {
+			payload["end"] = options.End.Format(time.RFC3339)
+		}
 	}
+
+	resp, err := ch.client.socket.request("get_history", payload, "history", ch.channelMatch, 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := parseMessages(resp, ch.name)
+	log.Printf("Retrieved %d messages from channel '%s' history", len(messages), ch.name)
+	return messages, nil
 }
 
-// GetPresence retrieves presence information for this channel
+// GetPresence retrieves presence information for this channel from the worker.
 func (ch *Channel) GetPresence(ctx context.Context) (*PresenceInfo, error) {
 	if !ch.client.IsConnected() {
 		return nil, fmt.Errorf("not connected to OddSockets")
 	}
 
-	// Simulate API call delay
-	select {
-	case <-time.After(50 * time.Millisecond):
-		ch.mu.RLock()
-		users := make([]string, len(ch.presenceUsers))
-		copy(users, ch.presenceUsers)
-		ch.mu.RUnlock()
-
-		presence := &PresenceInfo{
-			Channel:   ch.name,
-			Users:     users,
-			Count:     len(users),
-			Timestamp: time.Now(),
-		}
-
-		log.Printf("Retrieved presence for channel '%s': %d users", ch.name, presence.Count)
-		return presence, nil
-
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	resp, err := ch.client.socket.request("get_presence", map[string]interface{}{
+		"channel": ch.name,
+	}, "presence", ch.channelMatch, 5*time.Second)
+	if err != nil {
+		return nil, err
 	}
+
+	users, count := parsePresence(resp)
+	presence := &PresenceInfo{
+		Channel:   ch.name,
+		Users:     users,
+		Count:     count,
+		Timestamp: time.Now(),
+	}
+
+	log.Printf("Retrieved presence for channel '%s': %d users", ch.name, presence.Count)
+	return presence, nil
 }
 
 // IsSubscribed returns true if the channel is subscribed
@@ -314,23 +269,32 @@ func (ch *Channel) GetName() string {
 	return ch.name
 }
 
-// handleMessages handles incoming messages in a goroutine
-func (ch *Channel) handleMessages(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ch.ctx.Done():
-			return
-		default:
-			// In a real implementation, this would listen for incoming messages
-			// from the WebSocket connection
-			time.Sleep(100 * time.Millisecond)
+// handleIncoming routes a worker message envelope to the subscriber and,
+// when enabled, retains it in local history.
+func (ch *Channel) handleIncoming(envelope map[string]interface{}) {
+	msg := envelopeToMessage(envelope, ch.name)
+
+	ch.mu.RLock()
+	subscribed := ch.subscribed
+	hasChan := ch.messageChan != nil
+	retain := ch.subscribeOpts != nil && ch.subscribeOpts.RetainHistory
+	ch.mu.RUnlock()
+
+	if retain {
+		ch.mu.Lock()
+		ch.messageHistory = append(ch.messageHistory, msg)
+		if len(ch.messageHistory) > 100 {
+			ch.messageHistory = ch.messageHistory[len(ch.messageHistory)-100:]
 		}
+		ch.mu.Unlock()
+	}
+
+	if subscribed && hasChan {
+		ch.deliverMessage(msg)
 	}
 }
 
-// deliverMessage delivers a message to the subscriber
+// deliverMessage delivers a message to the subscriber channel (non-blocking).
 func (ch *Channel) deliverMessage(message *Message) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -338,36 +302,40 @@ func (ch *Channel) deliverMessage(message *Message) {
 		}
 	}()
 
-	// Apply filter if specified
-	if ch.subscribeOpts != nil && ch.subscribeOpts.FilterExpression != "" {
-		if !ch.evaluateFilter(message, ch.subscribeOpts.FilterExpression) {
-			return
-		}
+	ch.mu.RLock()
+	filter := ""
+	if ch.subscribeOpts != nil {
+		filter = ch.subscribeOpts.FilterExpression
+	}
+	target := ch.messageChan
+	ch.mu.RUnlock()
+
+	if filter != "" && !ch.evaluateFilter(message, filter) {
+		return
 	}
 
-	// Deliver message to channel (non-blocking)
+	if target == nil {
+		return
+	}
+
 	select {
-	case ch.messageChan <- message:
-		// Message delivered successfully
+	case target <- message:
 	default:
-		// Channel is full, log warning
 		log.Printf("Warning: message channel full for channel '%s'", ch.name)
 	}
 }
 
-// evaluateFilter evaluates a filter expression against a message
+// evaluateFilter evaluates a simple substring filter against a message.
 func (ch *Channel) evaluateFilter(message *Message, filterExpr string) bool {
-	// Simple filter evaluation (in real SDK, this would be more sophisticated)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Error evaluating filter: %v", r)
 		}
 	}()
 
-	// For demo purposes, just check if filter string is in message data
 	messageBytes, err := json.Marshal(message.Data)
 	if err != nil {
-		return true // If we can't marshal, pass the message
+		return true
 	}
 
 	messageStr := strings.ToLower(string(messageBytes))
@@ -376,37 +344,106 @@ func (ch *Channel) evaluateFilter(message *Message, filterExpr string) bool {
 	return strings.Contains(messageStr, filterStr)
 }
 
-// simulateInitialMessages simulates receiving some initial messages for demo purposes
-func (ch *Channel) simulateInitialMessages() {
-	time.Sleep(100 * time.Millisecond) // Wait a bit
-
-	ch.mu.RLock()
-	if !ch.subscribed || ch.messageChan == nil {
-		ch.mu.RUnlock()
-		return
+// subscribeOptionsPayload converts SubscribeOptions to the worker's camelCase
+// wire shape.
+func subscribeOptionsPayload(opts *SubscribeOptions) map[string]interface{} {
+	p := map[string]interface{}{
+		"enablePresence": opts.EnablePresence,
+		"retainHistory":  opts.RetainHistory,
 	}
-	ch.mu.RUnlock()
+	if opts.FilterExpression != "" {
+		p["filterExpression"] = opts.FilterExpression
+	}
+	return p
+}
 
-	// Create a welcome message
-	welcomeMessage := &Message{
-		ID:      fmt.Sprintf("msg_%s", uuid.New().String()[:12]),
-		Channel: ch.name,
-		Data: map[string]interface{}{
-			"type":      "system",
-			"text":      fmt.Sprintf("Welcome to channel '%s'!", ch.name),
-			"timestamp": time.Now().Format(time.RFC3339),
-		},
-		Timestamp: time.Now(),
-		UserID:    "system",
+// envelopeToMessage adapts a worker "message" envelope to a Message.
+func envelopeToMessage(env map[string]interface{}, channelName string) *Message {
+	msg := &Message{Channel: channelName, Timestamp: time.Now()}
+
+	if id := stringField(env, "id"); id != "" {
+		msg.ID = id
+	} else if id := stringField(env, "messageId"); id != "" {
+		msg.ID = id
 	}
 
-	// Deliver the welcome message
-	ch.deliverMessage(welcomeMessage)
-
-	// Store in history if enabled
-	ch.mu.Lock()
-	if ch.subscribeOpts != nil && ch.subscribeOpts.RetainHistory {
-		ch.messageHistory = append(ch.messageHistory, welcomeMessage)
+	if inner, ok := env["message"]; ok {
+		msg.Data = inner
+	} else if data, ok := env["data"]; ok {
+		msg.Data = data
 	}
-	ch.mu.Unlock()
+
+	if pub, ok := env["publisher"].(map[string]interface{}); ok {
+		msg.UserID = stringField(pub, "userId")
+	} else if uid := stringField(env, "userId"); uid != "" {
+		msg.UserID = uid
+	}
+
+	if md, ok := env["metadata"].(map[string]interface{}); ok {
+		msg.Metadata = md
+	}
+
+	if name := stringField(env, "channel"); name != "" {
+		msg.Channel = name
+	}
+
+	return msg
+}
+
+// parseMessages extracts a slice of Messages from a "history" response.
+func parseMessages(resp map[string]interface{}, channelName string) []*Message {
+	raw, ok := resp["messages"].([]interface{})
+	if !ok {
+		return []*Message{}
+	}
+
+	messages := make([]*Message, 0, len(raw))
+	for _, item := range raw {
+		if env, ok := item.(map[string]interface{}); ok {
+			messages = append(messages, envelopeToMessage(env, channelName))
+		}
+	}
+	return messages
+}
+
+// parsePresence extracts user ids and occupancy from a "presence" response.
+func parsePresence(resp map[string]interface{}) ([]string, int) {
+	users := make([]string, 0)
+
+	if occupants, ok := resp["occupants"].([]interface{}); ok {
+		for _, o := range occupants {
+			if m, ok := o.(map[string]interface{}); ok {
+				if uid := stringField(m, "userId"); uid != "" {
+					users = append(users, uid)
+				}
+			} else if s, ok := o.(string); ok {
+				users = append(users, s)
+			}
+		}
+	}
+
+	count := len(users)
+	if occ, ok := resp["occupancy"].(float64); ok {
+		count = int(occ)
+	}
+
+	return users, count
+}
+
+// stringField returns m[key] as a string, or "" if absent/not a string.
+func stringField(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// appendUnique appends value to slice only if not already present.
+func appendUnique(slice []string, value string) []string {
+	for _, s := range slice {
+		if s == value {
+			return slice
+		}
+	}
+	return append(slice, value)
 }

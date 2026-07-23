@@ -1,0 +1,48 @@
+# OddSockets Go SDK - live PROOF
+#
+# Built and run straight from the SDK sources via demo/Dockerfile against the
+# LIVE OddSockets platform (manager connect.oddsockets.tyga.network, worker
+# w002-oddsockets-1). Transport is a genuine Socket.IO (Engine.IO v4) client
+# over WebSocket (gorilla/websocket) hand-wired in oddsockets/socket.go - no
+# mocks, no local echo. API keys are redacted below; everything else is the
+# verbatim run.
+#
+#   docker build -f demo/Dockerfile -t oddsockets-go-demo .
+#   docker run --rm -e ODDSOCKETS_API_KEY=ak_your_key_here oddsockets-go-demo
+
+
+# ---- Single-client pub/sub round-trip -------------------------------------
+# Captured 2026-07-23. Subscribe -> publish -> receive our own nonce'd message
+# back through the worker. Process exit code: 0.
+
+Connecting to OddSockets...
+Connected.
+Using channel: demo-7221f734448a
+Subscribed.
+Publishing message...
+Published message id: 8a004397-1633-42f1-b6de-37aad5e2d0af
+OK - round-trip verified
+
+
+# ---- Enhanced-events two-client receive-path ------------------------------
+# Captured 2026-07-23.
+#   docker run --rm --entrypoint /usr/local/bin/enhanced \
+#     -e ODDSOCKETS_API_KEY=ak_your_key_here oddsockets-go-demo
+#
+# TWO independent clients (subscriber alice + publisher bob) on separate
+# connections, both in the same room. bob fires enhanced (Slack-like) actions;
+# because alice is on a SEPARATE connection, the broadcasts reaching alice's
+# public event stream (client.On("user_typing") / client.On("reaction_added"))
+# can only have travelled through the worker. Process exit code: 0.
+
+[connect] connecting both clients...
+[alice] worker w002-oddsockets-1
+[bob]   worker w002-oddsockets-1
+[connect] alice = connected, bob = connected
+[both] subscribed to enh-51f0751d84
+[bob] Enhanced.StartTyping(bob) ...
+[bob] published messageId=5b9525da-07fe-4bdb-a7c5-be57775683f0, Enhanced.AddReaction :thumbsup: ...
+[alice] received 'user_typing' from bob (channel enh-51f0751d84) - broadcast round-trip.
+[alice] received 'reaction_added' (:thumbsup:) from bob - broadcast round-trip.
+
+OK - enhanced broadcast receive-path verified (user_typing + reaction_added)

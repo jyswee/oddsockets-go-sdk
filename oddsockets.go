@@ -58,7 +58,7 @@ package oddsockets
 // All types and functions are available directly from the oddsockets subpackage.
 
 import (
-	"github.com/tygacloud/oddsocketsai-go-sdk/oddsockets"
+	"github.com/jyswee/oddsockets-go-sdk/oddsockets"
 )
 
 // Re-export key types for easier access

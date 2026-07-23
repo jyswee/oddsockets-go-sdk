@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/yourusername/oddsockets-go/oddsockets"
+	"github.com/jyswee/oddsockets-go-sdk/oddsockets"
 )
 
 func main() {

@@ -1,7 +1,6 @@
 package oddsockets
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 )

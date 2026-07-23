@@ -1,7 +1,6 @@
 package oddsockets
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,6 +23,9 @@ type Client struct {
 
 	// Enhanced features (67 new Slack-like events)
 	Enhanced *EnhancedFeatures
+
+	// Live Socket.IO transport to the assigned worker
+	socket *socketIO
 
 	// Channels
 	channels map[string]*Channel
@@ -211,6 +213,12 @@ func (c *Client) Disconnect() error {
 		ch.Unsubscribe()
 	}
 
+	// Close the live transport.
+	if c.socket != nil {
+		c.socket.close()
+		c.socket = nil
+	}
+
 	c.setState(Disconnected)
 	log.Println("Disconnected from OddSockets")
 	c.emitEvent(EventDisconnected, map[string]interface{}{
@@ -251,7 +259,7 @@ func (c *Client) Channel(name string) *Channel {
 
 // IsConnected returns true if the client is connected
 func (c *Client) IsConnected() bool {
-	return c.state == Connected
+	return c.state == Connected && c.socket != nil && c.socket.isConnected()
 }
 
 // GetConnectionState returns the current connection state
@@ -278,7 +286,6 @@ func (c *Client) Off(eventType EventType, handler EventHandler) {
 	c.eventMu.Lock()
 	defer c.eventMu.Unlock()
 
-	handlers := c.eventHandlers[eventType]
 	if handler == nil {
 		// Remove all handlers for this event type
 		delete(c.eventHandlers, eventType)
@@ -428,19 +435,6 @@ func (c *Client) emitEvent(eventType EventType, data interface{}) {
 	}
 }
 
-// BulkMessage represents a message for bulk publishing
-type BulkMessage struct {
-	Channel string      `json:"channel"`
-	Message interface{} `json:"message"`
-}
-
-// BulkResult represents the result of a bulk publish operation
-type BulkResult struct {
-	Success bool           `json:"success"`
-	Result  *PublishResult `json:"result,omitempty"`
-	Error   string         `json:"error,omitempty"`
-}
-
 // getWorkerAssignment gets worker assignment from manager
 func (c *Client) getWorkerAssignment(ctx context.Context) error {
 	// Discover the optimal manager URL automatically
@@ -513,22 +507,74 @@ func (c *Client) getWorkerAssignment(ctx context.Context) error {
 	return nil
 }
 
-// connectToWorker connects to the assigned worker
+// connectToWorker establishes the live Socket.IO connection to the assigned
+// worker and wires the receive path (channel message delivery + enhanced
+// broadcast forwarding onto the public event surface).
 func (c *Client) connectToWorker(ctx context.Context) error {
 	if c.workerURL == "" {
 		return fmt.Errorf("no worker URL available")
 	}
 
-	// In a real implementation, this would establish a WebSocket connection
-	// For now, we'll simulate the connection process
-	select {
-	case <-time.After(100 * time.Millisecond): // Simulate connection delay
-		log.Printf("Connected to worker: %s", c.workerURL)
-		c.startHeartbeat()
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("connection timeout: %w", ctx.Err())
+	socket, err := newSocketIO(c.workerURL, c.config.APIKey, c.userID)
+	if err != nil {
+		return err
 	}
+
+	if err := socket.connect(ctx, 15*time.Second); err != nil {
+		return err
+	}
+
+	c.socket = socket
+	c.setupReceivePath(socket)
+
+	log.Printf("Connected to worker: %s", c.workerURL)
+	c.startHeartbeat()
+	return nil
+}
+
+// setupReceivePath routes inbound worker events. Channel message envelopes are
+// delivered to the owning channel; enhanced-feature broadcasts are forwarded
+// onto the client's public event surface so apps can listen with
+// client.On("reaction_added", handler), etc. Correlated request/response acks
+// (subscribed, published, presence, history) are consumed by the Channel
+// methods directly and are intentionally not handled here.
+func (c *Client) setupReceivePath(socket *socketIO) {
+	socket.On("message", func(arg interface{}) {
+		m, ok := arg.(map[string]interface{})
+		if !ok {
+			return
+		}
+		name, _ := m["channel"].(string)
+		c.mu.RLock()
+		ch := c.channels[name]
+		c.mu.RUnlock()
+		if ch != nil {
+			ch.handleIncoming(m)
+		}
+	})
+
+	for _, event := range enhancedBroadcastEvents {
+		event := event
+		socket.On(event, func(arg interface{}) {
+			c.emitEvent(EventType(event), arg)
+		})
+	}
+}
+
+// enhancedBroadcastEvents are the enhanced (Slack-like) events the worker
+// delivers to other members of a room. They are forwarded onto the client
+// event surface so apps can subscribe with client.On(name, handler).
+var enhancedBroadcastEvents = []string{
+	"reaction_added", "reaction_removed",
+	"user_typing", "user_stopped_typing",
+	"user_read", "unread_count_updated", "all_marked_read",
+	"thread_reply", "thread_subscribed", "thread_followed", "thread_unfollowed", "thread_read_updated",
+	"message_edited", "message_deleted", "message_pinned", "message_unpinned",
+	"user_status_changed", "custom_status_updated", "custom_status_cleared", "dnd_status_changed", "status_updated",
+	"file_upload_completed", "file_upload_progress", "file_upload_failed",
+	"dm_created", "dm_received",
+	"notification", "notification_read", "all_notifications_read", "notifications_cleared",
+	"channel_created", "channel_updated", "user_invited", "user_joined_channel", "user_left_channel", "user_removed",
 }
 
 // scheduleReconnect schedules reconnection with exponential backoff
