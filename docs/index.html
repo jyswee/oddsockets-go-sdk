@@ -692,6 +692,12 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a href="#enhanced" class="nav-link">
+                            <i class="fas fa-bolt nav-icon"></i>
+                            Enhanced Features
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a href="#performance" class="nav-link">
                             <i class="fas fa-chart-line nav-icon"></i>
                             Performance
@@ -1168,6 +1174,95 @@ ctx = context.WithValue(ctx, "userID", "user-456")</code></pre>
                         <p>Browse all available examples including basic usage, concurrent operations, and production patterns</p>
                     </a>
                 </div>
+            </section>
+
+            <section id="enhanced" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-bolt"></i>
+                    Enhanced Features
+                </h2>
+
+                <p>Beyond core pub/sub, OddSockets ships a Slack-like <strong>enhanced surface</strong> &mdash;
+                reactions, typing indicators, threads, read receipts, presence/status, notifications, DMs,
+                channel management, message editing and search. It lives on <code>client.Enhanced</code>.
+                The pattern is always the same: <strong>send</strong> an action with a
+                <code>client.Enhanced.*</code> method, then <strong>receive</strong> the paired broadcast
+                with <code>client.On("&lt;event&gt;", handler)</code>.</p>
+
+                <h3 class="section-subtitle">Typing &amp; Reactions</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">// Receive-path: broadcasts from other users on the channel
+client.On("user_typing", func(_ oddsockets.EventType, data interface{}) {
+    fmt.Println("user is typing")
+})
+client.On("reaction_added", func(_ oddsockets.EventType, data interface{}) {
+    fmt.Println("reaction added")
+})
+
+// Send-path: enhanced actions over the live socket
+client.Enhanced.StartTyping("alice", "room-42")
+
+client.Enhanced.AddReaction(oddsockets.ReactionParams{
+    MessageID: "msg-1",
+    Channel:   "room-42",
+    Emoji:     ":thumbsup:",
+    UserID:    "alice",
+    UserName:  "Alice",
+})</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Threads</h3>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">client.On("thread_reply", func(_ oddsockets.EventType, data interface{}) {
+    fmt.Println("new thread reply")
+})
+
+result, err := client.Enhanced.ThreadReply(oddsockets.ThreadReplyParams{
+    Channel:         "room-42",
+    ParentMessageID: "msg-1",
+    Message:         "Replying in the thread",
+    UserID:          "alice",
+    UserName:        "Alice",
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("thread reply: %v\n", result)</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Enhanced surface</h3>
+                <p>Each area exposes methods on <code>client.Enhanced</code>; the worker broadcasts the
+                paired events which you handle with <code>client.On(...)</code>. Query methods
+                (<code>Get*</code>, <code>Search*</code>) return <code>(map[string]interface{}, error)</code>.</p>
+                <ul>
+                    <li><strong>Typing</strong> &mdash; <code>StartTyping</code>, <code>StopTyping</code> &rarr; <code>user_typing</code>, <code>user_stopped_typing</code></li>
+                    <li><strong>Reactions</strong> &mdash; <code>AddReaction</code>, <code>RemoveReaction</code>, <code>GetReactions</code> &rarr; <code>reaction_added</code>, <code>reaction_removed</code></li>
+                    <li><strong>Threads</strong> &mdash; <code>ThreadReply</code>, <code>GetThread</code>, <code>SubscribeThread</code>, <code>FollowThread</code>, <code>MarkThreadRead</code> &rarr; <code>thread_reply</code>, <code>thread_subscribed</code>, <code>thread_followed</code>, <code>thread_read_updated</code></li>
+                    <li><strong>Read receipts</strong> &mdash; <code>MarkRead</code>, <code>MarkAllRead</code>, <code>GetUnreadCounts</code> &rarr; <code>user_read</code>, <code>unread_count_updated</code>, <code>all_marked_read</code></li>
+                    <li><strong>Messages</strong> &mdash; <code>EditMessage</code>, <code>DeleteMessage</code>, <code>PinMessage</code>, <code>UnpinMessage</code>, <code>GetPinnedMessages</code>, <code>SearchMessages</code> &rarr; <code>message_edited</code>, <code>message_deleted</code>, <code>message_pinned</code>, <code>message_unpinned</code></li>
+                    <li><strong>Presence &amp; status</strong> &mdash; <code>SetStatus</code>, <code>SetCustomStatus</code>, <code>SetDND</code>, <code>GetUserPresence</code> &rarr; <code>user_status_changed</code>, <code>custom_status_updated</code>, <code>dnd_status_changed</code></li>
+                    <li><strong>Channels</strong> &mdash; <code>CreateChannel</code>, <code>UpdateChannel</code>, <code>ArchiveChannel</code>, <code>InviteToChannel</code>, <code>JoinChannel</code>, <code>LeaveChannel</code> &rarr; <code>channel_created</code>, <code>channel_updated</code>, <code>user_invited</code>, <code>user_joined_channel</code>, <code>user_left_channel</code></li>
+                    <li><strong>DMs</strong> &mdash; <code>CreateDM</code>, <code>SendDM</code>, <code>GetDMConversations</code> &rarr; <code>dm_created</code>, <code>dm_received</code></li>
+                    <li><strong>Notifications</strong> &mdash; <code>SubscribeNotifications</code>, <code>GetNotifications</code>, <code>MarkNotificationRead</code>, <code>ClearNotifications</code> &rarr; <code>notification</code>, <code>notification_read</code>, <code>notifications_cleared</code></li>
+                    <li><strong>Search</strong> &mdash; <code>SearchMessages</code>, <code>SearchInChannel</code>, <code>SearchByUser</code>, <code>FilterMessages</code> &rarr; (return values)</li>
+                </ul>
+                <p>For any worker event not wrapped above, subscribe with the raw
+                <code>client.On("&lt;event&gt;", handler)</code> API &mdash; all enhanced broadcasts are
+                forwarded onto the client surface.</p>
             </section>
 
             <section id="performance" class="section">

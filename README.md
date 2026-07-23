@@ -11,8 +11,7 @@ Official Go SDK for OddSockets real-time messaging platform.
 - **High Performance**: Optimized for Go's concurrency model with goroutines
 - **Channels & Context**: Native Go patterns with context cancellation
 - **Type Safety**: Strong typing with Go structs and interfaces
-- **PubNub Compatible**: Drop-in replacement for PubNub Go SDK
-- **High Performance**: 50% lower latency than PubNub
+- **Enhanced Surface**: Slack-like reactions, threads, typing, presence and more
 - **Cost Effective**: No per-message pricing, no message size limits
 - **Cloud Native**: Perfect for microservices and Kubernetes deployments
 
@@ -85,44 +84,6 @@ func main() {
 }
 ```
 
-### PubNub Migration
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-
-    "github.com/jyswee/oddsockets-go-sdk/pubnub"
-)
-
-func main() {
-    // Drop-in replacement for PubNub
-    config := pubnub.NewConfig()
-    config.PublishKey = "ak_live_1234567890abcdef"
-    config.SubscribeKey = "ak_live_1234567890abcdef"
-    config.UserID = "user123"
-
-    pn := pubnub.NewPubNub(config)
-    defer pn.Destroy()
-
-    // Subscribe
-    listener := &pubnub.SubscribeCallback{
-        Message: func(pn *pubnub.PubNub, message pubnub.MessageResult) {
-            fmt.Printf("Message: %+v\n", message.Message)
-        },
-    }
-
-    pn.AddListener(listener)
-    pn.Subscribe().Channels([]string{"my-channel"}).Execute()
-
-    // Publish
-    pn.Publish().Channel("my-channel").Message("Hello from Go!").Execute()
-}
-```
-
 ### Context and Cancellation
 
 ```go
@@ -160,21 +121,102 @@ func main() {
 }
 ```
 
-## Documentation
+## Enhanced Features
 
-- **[API Reference](docs/api-reference.md)** - Complete API documentation
-- **[Getting Started](docs/getting-started.md)** - Detailed setup guide
-- **[Migration Guide](docs/migration-guide.md)** - Migrate from PubNub
-- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
+Beyond core pub/sub, OddSockets ships a Slack-like **enhanced surface** — reactions,
+typing indicators, threads, read receipts, presence/status, notifications, DMs,
+channel management, message editing and search. It lives on the exported
+`client.Enhanced` field. The pattern is always the same:
+
+1. **Send** an action with a `client.Enhanced.*` method.
+2. **Receive** the paired broadcast with `client.On("<event>", handler)`.
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/jyswee/oddsockets-go-sdk/oddsockets"
+)
+
+func main() {
+    client, err := oddsockets.NewClient(&oddsockets.Config{
+        APIKey: "ak_live_1234567890abcdef",
+        UserID: "alice",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    ctx := context.Background()
+    if err := client.Connect(ctx); err != nil {
+        log.Fatal(err)
+    }
+
+    // Receive-path: broadcasts from other users on the channel
+    client.On("user_typing", func(_ oddsockets.EventType, data interface{}) {
+        m, _ := data.(map[string]interface{})
+        fmt.Printf("%v is typing\n", m["userId"])
+    })
+    client.On("reaction_added", func(_ oddsockets.EventType, data interface{}) {
+        m, _ := data.(map[string]interface{})
+        fmt.Printf("%v reacted %v\n", m["userId"], m["emoji"])
+    })
+
+    channel := client.Channel("room-42")
+    msgs := make(chan *oddsockets.Message, 100)
+    channel.Subscribe(ctx, msgs, &oddsockets.SubscribeOptions{EnablePresence: true})
+
+    // Send-path: enhanced actions over the live socket
+    client.Enhanced.StartTyping("alice", "room-42")
+    client.Enhanced.AddReaction(oddsockets.ReactionParams{
+        MessageID: "msg-1",
+        Channel:   "room-42",
+        Emoji:     ":thumbsup:",
+        UserID:    "alice",
+        UserName:  "Alice",
+    })
+    client.Enhanced.ThreadReply(oddsockets.ThreadReplyParams{
+        Channel:         "room-42",
+        ParentMessageID: "msg-1",
+        Message:         "Replying in the thread",
+        UserID:          "alice",
+        UserName:        "Alice",
+    })
+}
+```
+
+Each area exposes methods on `client.Enhanced`; the worker broadcasts the paired
+events which you handle with `client.On(...)`. Query methods (`Get*`, `Search*`)
+return `(map[string]interface{}, error)` with the worker response.
+
+| Area | Requests (`client.Enhanced.*`) | Broadcast events (`client.On`) |
+|------|--------------------------------|--------------------------------|
+| Typing | `StartTyping`, `StopTyping` | `user_typing`, `user_stopped_typing` |
+| Reactions | `AddReaction`, `RemoveReaction`, `GetReactions` | `reaction_added`, `reaction_removed` |
+| Threads | `ThreadReply`, `GetThread`, `SubscribeThread`, `FollowThread`, `MarkThreadRead` | `thread_reply`, `thread_subscribed`, `thread_followed`, `thread_read_updated` |
+| Read receipts | `MarkRead`, `MarkAllRead`, `GetUnreadCounts` | `user_read`, `unread_count_updated`, `all_marked_read` |
+| Messages | `EditMessage`, `DeleteMessage`, `PinMessage`, `UnpinMessage`, `GetPinnedMessages`, `SearchMessages` | `message_edited`, `message_deleted`, `message_pinned`, `message_unpinned` |
+| Presence & status | `SetStatus`, `SetCustomStatus`, `SetDND`, `GetUserPresence` | `user_status_changed`, `custom_status_updated`, `dnd_status_changed` |
+| Channels | `CreateChannel`, `UpdateChannel`, `ArchiveChannel`, `InviteToChannel`, `JoinChannel`, `LeaveChannel` | `channel_created`, `channel_updated`, `user_invited`, `user_joined_channel`, `user_left_channel` |
+| DMs | `CreateDM`, `SendDM`, `GetDMConversations` | `dm_created`, `dm_received` |
+| Notifications | `SubscribeNotifications`, `GetNotifications`, `MarkNotificationRead`, `ClearNotifications` | `notification`, `notification_read`, `notifications_cleared` |
+| Search | `SearchMessages`, `SearchInChannel`, `SearchByUser`, `FilterMessages` | `(map, error)` results |
+
+For any worker event not wrapped above, subscribe with the raw
+`client.On("<event>", handler)` API — all enhanced broadcasts are forwarded onto
+the client event stream.
 
 ## Examples
 
-Explore our comprehensive examples:
+Explore the runnable examples:
 
-- **[Basic Usage](examples/basic/main.go)** - Simple messaging
-- **[PubNub Migration](examples/pubnub/main.go)** - Migration example
-- **[Microservices](examples/microservices/main.go)** - Service-to-service messaging
-- **[Kubernetes](examples/kubernetes/)** - Cloud-native deployment
+- **[Basic Usage](examples/basic/main.go)** - Simple pub/sub messaging
+- **[Enhanced Features](examples/enhanced/main.go)** - Two-client enhanced-events regression
 
 ## Configuration
 
@@ -253,7 +295,7 @@ GOOS=linux GOARCH=amd64 go build -o oddsockets-linux ./cmd/example
 
 OddSockets Go SDK delivers superior performance:
 
-- **50% lower latency** compared to PubNub
+- **Low latency** real-time delivery
 - **99.9% uptime** with automatic failover
 - **Unlimited message size** - no artificial limits
 - **High throughput** - handle millions of messages with goroutines
