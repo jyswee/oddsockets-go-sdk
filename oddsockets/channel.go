@@ -222,7 +222,18 @@ func (ch *Channel) GetHistory(ctx context.Context, options *HistoryOptions) ([]*
 		}
 	}
 
-	resp, err := ch.client.socket.request("get_history", payload, "history", ch.channelMatch, 10*time.Second)
+	// Only accept the explicit get_history RESPONSE (query:true). The worker also
+	// emits "history" as a fire-and-forget on-join snapshot (capped at ~10 local
+	// messages, no query flag); without this guard GetHistory could resolve with
+	// that snapshot instead of the requested count from the shared store. Use a
+	// history-specific matcher rather than the shared channelMatch (which is also
+	// used by subscribe/publish/presence, none of which carry query). BUG-2026-0727-0012.
+	historyMatch := func(m map[string]interface{}) bool {
+		q, _ := m["query"].(bool)
+		return ch.channelMatch(m) && q
+	}
+
+	resp, err := ch.client.socket.request("get_history", payload, "history", historyMatch, 10*time.Second)
 	if err != nil {
 		return nil, err
 	}
