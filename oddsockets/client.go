@@ -3,9 +3,11 @@ package oddsockets
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -74,10 +76,13 @@ func NewClient(config *Config) (*Client, error) {
 		return nil, fmt.Errorf("invalid API key format")
 	}
 
-	// Set defaults
-	if config.ManagerURL == "" {
-		config.ManagerURL = "https://connect.oddsockets.tyga.network"
+	// Resolve the manager endpoint up front so an invalid value fails here
+	// rather than quietly sending traffic somewhere the caller did not ask for.
+	managerDiscovery, err := NewManagerDiscovery(config.ManagerURL)
+	if err != nil {
+		return nil, err
 	}
+	config.ManagerURL = managerDiscovery.ManagerURL()
 
 	if config.UserID == "" {
 		config.UserID = fmt.Sprintf("user_%s", uuid.New().String()[:8])
@@ -101,7 +106,7 @@ func NewClient(config *Config) (*Client, error) {
 		eventHandlers:        make(map[EventType][]EventHandler),
 		maxReconnectAttempts: 5,
 		reconnectDelay:       1000 * time.Millisecond,
-		managerDiscovery:     NewManagerDiscovery(),
+		managerDiscovery:     managerDiscovery,
 		ctx:                  ctx,
 		cancel:               cancel,
 		heartbeatDone:        make(chan bool),
@@ -437,10 +442,11 @@ func (c *Client) emitEvent(eventType EventType, data interface{}) {
 
 // getWorkerAssignment gets worker assignment from manager
 func (c *Client) getWorkerAssignment(ctx context.Context) error {
-	// Discover the optimal manager URL automatically
+	// Use the configured manager verbatim; there is no alternative endpoint to
+	// fall back to if it is unreachable.
 	managerURL, err := c.managerDiscovery.DiscoverManagerURL(c.config.APIKey)
 	if err != nil {
-		return fmt.Errorf("failed to discover manager URL: %w", err)
+		return fmt.Errorf("failed to resolve manager URL: %w", err)
 	}
 
 	// Build request URL
@@ -468,8 +474,11 @@ func (c *Client) getWorkerAssignment(ctx context.Context) error {
 	client := &http.Client{Timeout: c.config.Timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		// If manager is offline, try fallback logic
-		if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "no such host") {
+		// Classified on the error type rather than its wording, which changes
+		// between Go releases and platforms. Either way the call fails: there is
+		// no second manager to try.
+		var opErr *net.OpError
+		if errors.As(err, &opErr) && opErr.Op == "dial" {
 			return fmt.Errorf("manager is offline. Cannot assign worker without session stickiness")
 		}
 		return fmt.Errorf("failed to get worker assignment: %w", err)

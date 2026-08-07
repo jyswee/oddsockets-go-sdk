@@ -9,7 +9,8 @@ type Config struct {
 	// APIKey is the OddSockets API key (required)
 	APIKey string
 
-	// ManagerURL is the manager URL (optional, defaults to https://connect.oddsockets.tyga.network)
+	// ManagerURL is the manager URL. When empty the ODDSOCKETS_MANAGER_URL
+	// environment variable is used, otherwise DefaultManagerURL.
 	ManagerURL string
 
 	// UserID is the user identifier (optional, auto-generated if not provided)
@@ -30,8 +31,10 @@ type Config struct {
 
 // DefaultConfig returns a Config with default values
 func DefaultConfig() *Config {
+	// ManagerURL is deliberately left empty so that NewClient can apply the
+	// documented precedence (explicit value, then ODDSOCKETS_MANAGER_URL, then
+	// DefaultManagerURL) instead of pinning every caller to the hosted cluster.
 	return &Config{
-		ManagerURL:        "https://connect.oddsockets.tyga.network",
 		AutoConnect:       true,
 		ReconnectAttempts: 5,
 		HeartbeatInterval: 30 * time.Second,

@@ -108,6 +108,14 @@ type (
 
 // Re-export constants
 const (
+	// DefaultManagerURL is the hosted manager endpoint, used only when no
+	// manager URL is configured
+	DefaultManagerURL = oddsockets.DefaultManagerURL
+
+	// ManagerURLEnvVar is the environment variable consulted when no manager URL
+	// is supplied in code
+	ManagerURLEnvVar = oddsockets.ManagerURLEnvVar
+
 	// Connection states
 	Disconnected  = oddsockets.Disconnected
 	Connecting    = oddsockets.Connecting
@@ -131,4 +139,7 @@ var (
 
 	// DefaultConfig returns a Config with default values
 	DefaultConfig = oddsockets.DefaultConfig
+
+	// ResolveManagerURL resolves and validates the manager URL to be used
+	ResolveManagerURL = oddsockets.ResolveManagerURL
 )
