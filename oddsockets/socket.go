@@ -15,6 +15,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// credentials are the auth values presented in the Socket.IO CONNECT
+// handshake. Exactly one of token (minted realtime token, FEAT-2026-0824-0040)
+// or apiKey is used; token takes precedence when set.
+type credentials struct {
+	apiKey string
+	token  string
+}
+
 // socketHandler is a single registered listener for a Socket.IO event.
 type socketHandler struct {
 	id    uint64
@@ -30,8 +38,10 @@ type socketHandler struct {
 // it lands in the worker's handshake.auth, exactly like socket.io-client.
 type socketIO struct {
 	wsURL  string
-	apiKey string
 	userID string
+
+	authMu sync.Mutex
+	auth   credentials
 
 	conn    *websocket.Conn
 	writeMu sync.Mutex
@@ -52,7 +62,7 @@ type socketIO struct {
 
 // newSocketIO builds a socket for the given worker URL. The worker URL is an
 // http(s) origin; it is rewritten to the ws(s) Socket.IO endpoint.
-func newSocketIO(workerURL, apiKey, userID string) (*socketIO, error) {
+func newSocketIO(workerURL string, auth credentials, userID string) (*socketIO, error) {
 	u, err := url.Parse(workerURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid worker URL: %w", err)
@@ -73,12 +83,21 @@ func newSocketIO(workerURL, apiKey, userID string) (*socketIO, error) {
 
 	return &socketIO{
 		wsURL:       u.String(),
-		apiKey:      apiKey,
+		auth:        auth,
 		userID:      userID,
 		handlers:    make(map[string][]*socketHandler),
 		connectedCh: make(chan struct{}),
 		closeCh:     make(chan struct{}),
 	}, nil
+}
+
+// updateAuth swaps the handshake credentials in place. A refreshed minted token
+// installed here is carried by the next transport (re)connect; the live
+// connection is not forcibly torn down. (FEAT-2026-0824-0040)
+func (s *socketIO) updateAuth(c credentials) {
+	s.authMu.Lock()
+	s.auth = c
+	s.authMu.Unlock()
 }
 
 // connect dials the worker and blocks until the Socket.IO CONNECT handshake
@@ -120,7 +139,15 @@ func (s *socketIO) readLoop() {
 
 		switch data[0] {
 		case '0': // Engine.IO OPEN: reply with Socket.IO CONNECT + auth.
-			auth := map[string]string{"apiKey": s.apiKey}
+			s.authMu.Lock()
+			cred := s.auth
+			s.authMu.Unlock()
+			auth := map[string]string{}
+			if cred.token != "" {
+				auth["token"] = cred.token
+			} else {
+				auth["apiKey"] = cred.apiKey
+			}
 			if s.userID != "" {
 				auth["userId"] = s.userID
 			}

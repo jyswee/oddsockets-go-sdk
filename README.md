@@ -121,6 +121,40 @@ func main() {
 }
 ```
 
+### Token auth for game clients (`TokenProvider`)
+
+Game and app clients should never ship a static API key. Instead, supply a
+`TokenProvider` callback that exchanges your player's own JWT for a short-lived,
+scoped realtime token via the OddSockets `/v1/token` front door. The SDK calls
+it before every (re)connect and again shortly before the token expires, so the
+connection refreshes itself with no restart.
+
+```go
+client, _ := oddsockets.NewClient(&oddsockets.Config{
+    // No APIKey. The provider supplies a fresh minted token instead.
+    TokenProvider: func(ctx context.Context) (oddsockets.Token, error) {
+        // Exchange the signed-in player's JWT for a realtime token.
+        // POST https://connect.oddsockets.tyga.network/v1/token
+        //   Authorization: Bearer <player JWT>
+        // -> { token, expiresAt, exp, baseUrl, identity }
+        return mintRealtimeToken(ctx, playerJWT())
+    },
+    // Refresh this many ms before expiry (default 120000).
+    TokenRefreshLeadMs: 120000,
+})
+
+// token_refreshed fires each time the SDK rotates the token in place.
+client.On("token_refreshed", func(_ oddsockets.EventType, data interface{}) {
+    log.Printf("realtime token refreshed: %+v", data)
+})
+
+client.Connect(context.Background())
+```
+
+The `Token` returned by your provider only needs `Token`; `ExpiresAt` (ISO-8601
+or epoch), `Exp` (epoch seconds), or the JWT's own `exp` claim are used to
+schedule the ahead-of-expiry refresh.
+
 ## Enhanced Features
 
 Beyond core pub/sub, OddSockets ships a Slack-like **enhanced surface** — reactions,
@@ -224,14 +258,17 @@ Explore the runnable examples:
 
 ```go
 config := &oddsockets.Config{
-    APIKey:            "your-api-key",        // Required: Your OddSockets API key
-    ManagerURL:        "manager-url",         // Optional: Manager URL
-    UserID:            "user-id",             // Optional: User identifier
-    AutoConnect:       true,                  // Optional: Auto-connect on creation
-    ReconnectAttempts: 5,                     // Optional: Max reconnection attempts
-    HeartbeatInterval: 30 * time.Second,     // Optional: Heartbeat interval
-    Timeout:           10 * time.Second,     // Optional: Request timeout
+    APIKey:             "your-api-key",       // Your OddSockets API key (or use TokenProvider)
+    TokenProvider:      provider,             // Optional: mint minted tokens instead of an API key
+    TokenRefreshLeadMs: 120000,               // Optional: refresh lead time before token expiry
+    ManagerURL:         "manager-url",        // Optional: Manager URL
+    UserID:             "user-id",            // Optional: User identifier
+    AutoConnect:        true,                 // Optional: Auto-connect on creation
+    ReconnectAttempts:  5,                    // Optional: Max reconnection attempts
+    HeartbeatInterval:  30 * time.Second,     // Optional: Heartbeat interval
+    Timeout:            10 * time.Second,     // Optional: Request timeout
 }
+// Provide EITHER APIKey OR TokenProvider.
 ```
 
 ### Channel Options

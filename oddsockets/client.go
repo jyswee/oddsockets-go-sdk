@@ -2,6 +2,7 @@ package oddsockets
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +51,13 @@ type Client struct {
 	clientIdentifier string
 	sessionInfo      *SessionInfo
 
+	// Minted-token auth (FEAT-2026-0824-0040). Populated only when the config
+	// supplies a TokenProvider instead of an APIKey.
+	token          string
+	tokenExpiresAt int64 // epoch millis, 0 = unknown
+	tokenRefreshTimer *time.Timer
+	tokenMu        sync.Mutex
+
 	// Manager discovery
 	managerDiscovery *ManagerDiscovery
 
@@ -67,13 +76,21 @@ func NewClient(config *Config) (*Client, error) {
 		config = DefaultConfig()
 	}
 
-	// Validate required fields
-	if config.APIKey == "" {
-		return nil, fmt.Errorf("API key is required")
+	// Validate required fields. Either an API key or a TokenProvider is
+	// acceptable; a game client using minted tokens has neither an ak_ key nor
+	// the ak_ prefix, so the format check only applies to key-mode.
+	tokenMode := config.TokenProvider != nil
+	if !tokenMode {
+		if config.APIKey == "" {
+			return nil, fmt.Errorf("either an API key or a TokenProvider is required")
+		}
+		if !strings.HasPrefix(config.APIKey, "ak_") {
+			return nil, fmt.Errorf("invalid API key format")
+		}
 	}
 
-	if !strings.HasPrefix(config.APIKey, "ak_") {
-		return nil, fmt.Errorf("invalid API key format")
+	if config.TokenRefreshLeadMs == 0 {
+		config.TokenRefreshLeadMs = 120000
 	}
 
 	// Resolve the manager endpoint up front so an invalid value fails here
@@ -112,8 +129,13 @@ func NewClient(config *Config) (*Client, error) {
 		heartbeatDone:        make(chan bool),
 	}
 
-	// Generate client identifier for session stickiness
-	client.clientIdentifier = generateClientIdentifier(config.APIKey, config.UserID)
+	// Generate client identifier for session stickiness. In token mode there is
+	// no API key to seed from, so fall back to a stable placeholder.
+	identifierSeed := config.APIKey
+	if identifierSeed == "" {
+		identifierSeed = "token-client"
+	}
+	client.clientIdentifier = generateClientIdentifier(identifierSeed, config.UserID)
 
 	// Initialize enhanced features (67 new Slack-like events)
 	client.Enhanced = NewEnhancedFeatures(client)
@@ -149,6 +171,23 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.setState(Connecting)
 	c.emitEvent("connecting", nil)
 	log.Println("Connecting to OddSockets...")
+
+	// Step 0: In token mode, resolve a fresh minted token before every
+	// (re)connect so both the manager select-worker call and the worker
+	// handshake carry a valid token. (FEAT-2026-0824-0040)
+	if c.isTokenMode() {
+		if err := c.resolveToken(ctx); err != nil {
+			c.setState(Disconnected)
+			c.lastError = err
+			c.emitEvent(EventError, err)
+			if c.reconnectCount < c.maxReconnectAttempts {
+				c.scheduleReconnect()
+			} else {
+				c.emitEvent("max_reconnect_attempts_reached", nil)
+			}
+			return err
+		}
+	}
 
 	// Step 1: Get worker assignment from manager
 	if err := c.getWorkerAssignment(ctx); err != nil {
@@ -205,6 +244,14 @@ func (c *Client) Disconnect() error {
 
 	// Stop heartbeat
 	c.stopHeartbeat()
+
+	// Cancel any pending token refresh.
+	c.tokenMu.Lock()
+	if c.tokenRefreshTimer != nil {
+		c.tokenRefreshTimer.Stop()
+		c.tokenRefreshTimer = nil
+	}
+	c.tokenMu.Unlock()
 
 	// Unsubscribe from all channels
 	c.mu.RLock()
@@ -455,9 +502,14 @@ func (c *Client) getWorkerAssignment(ctx context.Context) error {
 		return fmt.Errorf("invalid manager URL: %w", err)
 	}
 
-	// Add query parameters
+	// Add query parameters. In token mode present the minted token instead of
+	// an API key. (FEAT-2026-0824-0041)
 	params := url.Values{}
-	params.Add("apiKey", c.config.APIKey)
+	if c.isTokenMode() {
+		params.Add("token", c.currentToken())
+	} else {
+		params.Add("apiKey", c.config.APIKey)
+	}
 	params.Add("userId", c.userID)
 	params.Add("clientIdentifier", c.clientIdentifier)
 	reqURL.RawQuery = params.Encode()
@@ -524,7 +576,14 @@ func (c *Client) connectToWorker(ctx context.Context) error {
 		return fmt.Errorf("no worker URL available")
 	}
 
-	socket, err := newSocketIO(c.workerURL, c.config.APIKey, c.userID)
+	// In token mode present the minted token in the handshake auth; otherwise
+	// the API key. (FEAT-2026-0824-0039)
+	auth := credentials{apiKey: c.config.APIKey}
+	if c.isTokenMode() {
+		auth = credentials{token: c.currentToken()}
+	}
+
+	socket, err := newSocketIO(c.workerURL, auth, c.userID)
 	if err != nil {
 		return err
 	}
@@ -535,6 +594,12 @@ func (c *Client) connectToWorker(ctx context.Context) error {
 
 	c.socket = socket
 	c.setupReceivePath(socket)
+
+	// Arm the ahead-of-expiry refresh once the live socket exists so the timer
+	// can swap the token into the handshake in place.
+	if c.isTokenMode() {
+		c.scheduleTokenRefresh()
+	}
 
 	log.Printf("Connected to worker: %s", c.workerURL)
 	c.startHeartbeat()
@@ -636,4 +701,139 @@ func (c *Client) GetClientIdentifier() string {
 // GetSessionInfo returns session information
 func (c *Client) GetSessionInfo() *SessionInfo {
 	return c.sessionInfo
+}
+
+// isTokenMode reports whether the client authenticates with minted tokens from
+// a TokenProvider rather than a static API key. (FEAT-2026-0824-0040)
+func (c *Client) isTokenMode() bool {
+	return c.config.TokenProvider != nil
+}
+
+// currentToken returns the most recently resolved minted token.
+func (c *Client) currentToken() string {
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+	return c.token
+}
+
+// resolveToken invokes the configured TokenProvider and caches the fresh token
+// along with its computed expiry (epoch millis).
+func (c *Client) resolveToken(ctx context.Context) error {
+	tok, err := c.config.TokenProvider(ctx)
+	if err != nil {
+		return fmt.Errorf("token provider failed: %w", err)
+	}
+	if tok.Token == "" {
+		return fmt.Errorf("token provider returned an empty token")
+	}
+
+	expMs := expiryFromToken(tok)
+
+	c.tokenMu.Lock()
+	c.token = tok.Token
+	c.tokenExpiresAt = expMs
+	c.tokenMu.Unlock()
+
+	log.Printf("Resolved minted token (expires in %dms)", expMs-time.Now().UnixMilli())
+	return nil
+}
+
+// scheduleTokenRefresh arms a one-shot timer to re-resolve the token ahead of
+// its expiry, swap it into the live socket handshake auth, emit
+// token_refreshed, then re-arm for the next cycle.
+func (c *Client) scheduleTokenRefresh() {
+	c.tokenMu.Lock()
+	if c.tokenRefreshTimer != nil {
+		c.tokenRefreshTimer.Stop()
+		c.tokenRefreshTimer = nil
+	}
+	expMs := c.tokenExpiresAt
+	c.tokenMu.Unlock()
+
+	if expMs <= 0 {
+		// Unknown expiry: cannot schedule an ahead-of-time refresh.
+		return
+	}
+
+	delayMs := expMs - time.Now().UnixMilli() - int64(c.config.TokenRefreshLeadMs)
+	if delayMs < 0 {
+		delayMs = 0
+	}
+
+	timer := time.AfterFunc(time.Duration(delayMs)*time.Millisecond, func() {
+		if c.state != Connected {
+			return
+		}
+		if err := c.resolveToken(c.ctx); err != nil {
+			log.Printf("Token refresh failed: %v", err)
+			c.emitEvent(EventError, err)
+			return
+		}
+		if c.socket != nil {
+			c.socket.updateAuth(credentials{token: c.currentToken()})
+		}
+		c.emitEvent(EventType("token_refreshed"), map[string]interface{}{
+			"expiresAt": c.tokenExpiresAt,
+		})
+		// Re-arm for the following cycle.
+		c.scheduleTokenRefresh()
+	})
+
+	c.tokenMu.Lock()
+	c.tokenRefreshTimer = timer
+	c.tokenMu.Unlock()
+}
+
+// expiryFromToken derives the token expiry in epoch millis, preferring the
+// explicit ExpiresAt / Exp fields and falling back to decoding the JWT.
+func expiryFromToken(tok Token) int64 {
+	if tok.ExpiresAt != "" {
+		if ms := parseExpiresAt(tok.ExpiresAt); ms > 0 {
+			return ms
+		}
+	}
+	if tok.Exp > 0 {
+		return tok.Exp * 1000
+	}
+	return expiryFromJwt(tok.Token)
+}
+
+// parseExpiresAt interprets an ExpiresAt value that may be a numeric epoch (in
+// seconds or millis) or an ISO-8601 timestamp, returning epoch millis.
+func parseExpiresAt(s string) int64 {
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		if n < 1e12 {
+			return n * 1000 // epoch seconds
+		}
+		return n // epoch millis
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t.UnixMilli()
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UnixMilli()
+	}
+	return 0
+}
+
+// expiryFromJwt base64url-decodes a JWT payload and returns its exp claim as
+// epoch millis, or 0 when the token is not a decodable JWT.
+func expiryFromJwt(token string) int64 {
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return 0
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		if payload, err = base64.URLEncoding.DecodeString(parts[1]); err != nil {
+			return 0
+		}
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil || claims.Exp == 0 {
+		return 0
+	}
+	return claims.Exp * 1000
 }

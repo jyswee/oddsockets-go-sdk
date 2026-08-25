@@ -1,13 +1,51 @@
 package oddsockets
 
 import (
+	"context"
 	"time"
 )
 
+// Token is a minted realtime token returned by a TokenProvider. Only Token is
+// required; the remaining fields let the SDK schedule an ahead-of-expiry
+// refresh without having to decode the JWT itself.
+type Token struct {
+	// Token is the minted realtime token (JWT) presented to the manager and
+	// worker instead of an API key.
+	Token string `json:"token"`
+
+	// ExpiresAt is the ISO-8601 (or epoch) expiry. Optional.
+	ExpiresAt string `json:"expiresAt,omitempty"`
+
+	// Exp is the epoch-seconds expiry claim. Optional.
+	Exp int64 `json:"exp,omitempty"`
+
+	// BaseUrl is the manager base URL the token is scoped to. Optional.
+	BaseUrl string `json:"baseUrl,omitempty"`
+
+	// Identity is the resolved caller identity. Optional.
+	Identity string `json:"identity,omitempty"`
+}
+
+// TokenProvider returns a fresh minted realtime token. It is called before
+// every (re)connect and again shortly before the current token expires. Used
+// INSTEAD of an APIKey by game clients that exchange a player JWT for a
+// short-lived scoped token via the OddSockets /v1/token front door.
+// (FEAT-2026-0824-0040)
+type TokenProvider func(ctx context.Context) (Token, error)
+
 // Config represents the configuration for OddSockets client
 type Config struct {
-	// APIKey is the OddSockets API key (required)
+	// APIKey is the OddSockets API key. Omit when authenticating with a
+	// TokenProvider instead.
 	APIKey string
+
+	// TokenProvider supplies minted realtime tokens for keyless (player-JWT)
+	// authentication. When set, it is used instead of APIKey. (FEAT-2026-0824-0040)
+	TokenProvider TokenProvider
+
+	// TokenRefreshLeadMs refreshes a minted token this many milliseconds before
+	// it expires. Defaults to 120000.
+	TokenRefreshLeadMs int
 
 	// ManagerURL is the manager URL. When empty the ODDSOCKETS_MANAGER_URL
 	// environment variable is used, otherwise DefaultManagerURL.
