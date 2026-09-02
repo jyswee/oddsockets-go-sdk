@@ -698,6 +698,12 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a href="#challenges" class="nav-link">
+                            <i class="fas fa-trophy nav-icon"></i>
+                            Challenges &amp; Leaderboards
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a href="#performance" class="nav-link">
                             <i class="fas fa-chart-line nav-icon"></i>
                             Performance
@@ -1263,6 +1269,97 @@ fmt.Printf("thread reply: %v\n", result)</code></pre>
                 <p>For any worker event not wrapped above, subscribe with the raw
                 <code>client.On("&lt;event&gt;", handler)</code> API &mdash; all enhanced broadcasts are
                 forwarded onto the client surface.</p>
+            </section>
+
+            <section id="challenges" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-trophy"></i>
+                    Challenges &amp; Leaderboards
+                </h2>
+
+                <p>Challenges, leaderboards and achievements build on the same live socket. The send
+                side lives on the enhanced surface (<code>client.Enhanced</code>); request/query methods
+                resolve with the worker's reply as <code>(map[string]interface{}, error)</code>, while
+                progress and achievement calls are fire-and-forget. Inbound broadcasts arrive on the
+                client event surface &mdash; subscribe with the client's normal
+                <code>client.On("&lt;event&gt;", handler)</code>.</p>
+
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="code-lang">go</span>
+                        <button class="code-copy" onclick="copyCode(this)">
+                            <i class="fas fa-copy"></i>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-go">// Create a ranked leaderboard, report progress, read standings, then finalize
+client.Enhanced.CreateChallenge(oddsockets.CreateChallengeParams{
+    ChallengeID: "weekly-sprint",
+    Metric:      "points",
+    Ranked:      true,
+})
+client.Enhanced.ReportProgress(oddsockets.ReportProgressParams{
+    ChallengeID: "weekly-sprint",
+    Value:       120,
+})
+standings, err := client.Enhanced.GetStandings(oddsockets.GetStandingsParams{
+    ChallengeID: "weekly-sprint",
+    Limit:       10,
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("standings: %v\n", standings)
+client.Enhanced.CompleteChallenge(oddsockets.CompleteChallengeParams{
+    ChallengeID: "weekly-sprint",
+    Outcome:     "completed",
+})</code></pre>
+                </div>
+
+                <h3 class="section-subtitle">Send-side methods</h3>
+                <p>Request/query methods (<code>GetStandings</code>, <code>GetAchievements</code>,
+                <code>CreateChallenge</code>, <code>CompleteChallenge</code>, the invite calls) return
+                <code>(map[string]interface{}, error)</code> and resolve with the worker's ack.
+                <code>ReportProgress</code> and <code>UnlockAchievement</code> are fire-and-forget.</p>
+                <ul>
+                    <li><strong>CreateChallenge</strong> &mdash; create a challenge/leaderboard. Ack <code>challenge_create_success</code>.</li>
+                    <li><strong>ReportProgress</strong> &mdash; fire-and-forget metric progress. No ack.</li>
+                    <li><strong>CompleteChallenge</strong> &mdash; finalize with an <code>outcome</code>. Ack <code>challenge_complete_success</code>.</li>
+                    <li><strong>UnlockAchievement</strong> &mdash; fire-and-forget; pass <code>PercentComplete</code> (0&ndash;100). No ack.</li>
+                    <li><strong>GetStandings</strong> &mdash; request top-N + caller rank. Ack <code>challenge_standings_success</code>.</li>
+                    <li><strong>GetAchievements</strong> &mdash; query achievement state. Ack <code>achievement_state</code>.</li>
+                    <li><strong>SendChallengeInvite</strong> &mdash; directed invite to another user. Ack <code>challenge_invite_success</code>.</li>
+                    <li><strong>ReplyChallengeInvite</strong> &mdash; accept/decline an invite. Ack <code>challenge_reply_success</code>.</li>
+                    <li><strong>CancelChallengeInvite</strong> &mdash; cancel a sent invite. Ack <code>challenge_invite_cancel_success</code>.</li>
+                    <li><strong>GetChallengeInvites</strong> &mdash; list pending invites. Ack <code>challenge_invites</code>.</li>
+                </ul>
+
+                <h3 class="section-subtitle">Completion outcomes</h3>
+                <p><code>CompleteChallenge</code> takes an <code>Outcome</code> from this vocabulary:</p>
+                <ul>
+                    <li><code>completed</code> &mdash; win (rank 1)</li>
+                    <li><code>failed</code> &mdash; loss</li>
+                    <li><code>tied</code> &mdash; draw</li>
+                    <li><code>conceded</code> &mdash; resign / concede</li>
+                    <li><code>expired</code> &mdash; timed out</li>
+                </ul>
+
+                <h3 class="section-subtitle">Progressive achievements</h3>
+                <p><code>UnlockAchievement</code> always emits the wire event
+                <code>achievement_unlock</code>; the worker is authoritative and derives the outbound
+                broadcast from <code>PercentComplete</code>. A value <code>&lt; 100</code> broadcasts
+                <code>achievement_progress</code> (status <code>in_progress</code>); a value
+                <code>&gt;= 100</code> or omitted broadcasts <code>achievement_unlock</code> (status
+                <code>unlocked</code>). Always call <code>UnlockAchievement</code> &mdash; do not emit
+                <code>achievement_progress</code> yourself.</p>
+
+                <h3 class="section-subtitle">Inbound broadcasts</h3>
+                <p>Subscribe to these on the client surface with
+                <code>client.On("&lt;event&gt;", handler)</code>.</p>
+                <ul>
+                    <li><strong>Room broadcasts</strong> &mdash; <code>challenge_progress</code>, <code>leaderboard_rank_change</code>, <code>challenge_complete</code>, <code>achievement_unlock</code>, <code>achievement_progress</code></li>
+                    <li><strong>Directed (per-user)</strong> &mdash; <code>challenge_invited</code>, <code>challenge_reply_received</code>, <code>challenge_invite_cancelled</code></li>
+                </ul>
             </section>
 
             <section id="performance" class="section">
