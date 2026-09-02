@@ -1047,3 +1047,394 @@ func (e *EnhancedFeatures) SearchByUser(params SearchByUserParams) (map[string]i
 		return nil, fmt.Errorf("timeout waiting for user search results")
 	}
 }
+
+// ==================== CHALLENGE / LEADERBOARD / ACHIEVEMENT EVENTS ====================
+
+// CreateChallengeParams parameters for creating a challenge.
+// {challengeId, metric, ranked?, channel?, resultWebhookUrl?, standingsUrl?}
+type CreateChallengeParams struct {
+	ChallengeID      string `json:"challengeId"`
+	Metric           string `json:"metric"`
+	Ranked           bool   `json:"ranked,omitempty"`
+	Channel          string `json:"channel,omitempty"`
+	ResultWebhookURL string `json:"resultWebhookUrl,omitempty"`
+	StandingsURL     string `json:"standingsUrl,omitempty"`
+}
+
+// CreateChallenge creates a challenge and waits for the server ack.
+func (e *EnhancedFeatures) CreateChallenge(params CreateChallengeParams) (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("challenge_create_success", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "challenge_create" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("challenge_create", params)
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for challenge creation")
+	}
+}
+
+// ReportProgressParams parameters for reporting challenge progress.
+// {challengeId, value, metric?, eventId?, cohort?, platform?, channel?}
+type ReportProgressParams struct {
+	ChallengeID string      `json:"challengeId"`
+	Value       interface{} `json:"value"`
+	Metric      string      `json:"metric,omitempty"`
+	EventID     string      `json:"eventId,omitempty"`
+	Cohort      string      `json:"cohort,omitempty"`
+	Platform    string      `json:"platform,omitempty"`
+	Channel     string      `json:"channel,omitempty"`
+}
+
+// ReportProgress reports challenge progress (fire-and-forget, no ack).
+func (e *EnhancedFeatures) ReportProgress(params ReportProgressParams) error {
+	if !e.client.IsConnected() {
+		return fmt.Errorf("not connected to OddSockets")
+	}
+
+	e.client.socket.Emit("challenge_progress", params)
+	return nil
+}
+
+// CompleteChallengeParams parameters for completing a challenge.
+// {challengeId, outcome, eventId?, reward?} outcome in {completed,failed,expired,conceded,tied}
+type CompleteChallengeParams struct {
+	ChallengeID string      `json:"challengeId"`
+	Outcome     string      `json:"outcome"`
+	EventID     string      `json:"eventId,omitempty"`
+	Reward      interface{} `json:"reward,omitempty"`
+}
+
+// CompleteChallenge completes a challenge and waits for the server ack.
+func (e *EnhancedFeatures) CompleteChallenge(params CompleteChallengeParams) (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("challenge_complete_success", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "challenge_complete" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("challenge_complete", params)
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for challenge completion")
+	}
+}
+
+// UnlockAchievementParams parameters for unlocking/progressing an achievement.
+// {achievementId, name?, tier?, percentComplete?, challengeId?, channel?}
+// percentComplete <100 -> achievement_progress, >=100 or omit -> achievement_unlock.
+type UnlockAchievementParams struct {
+	AchievementID   string      `json:"achievementId"`
+	Name            string      `json:"name,omitempty"`
+	Tier            string      `json:"tier,omitempty"`
+	PercentComplete interface{} `json:"percentComplete,omitempty"`
+	ChallengeID     string      `json:"challengeId,omitempty"`
+	Channel         string      `json:"channel,omitempty"`
+}
+
+// UnlockAchievement unlocks or progresses an achievement (fire-and-forget, no ack).
+func (e *EnhancedFeatures) UnlockAchievement(params UnlockAchievementParams) error {
+	if !e.client.IsConnected() {
+		return fmt.Errorf("not connected to OddSockets")
+	}
+
+	e.client.socket.Emit("achievement_unlock", params)
+	return nil
+}
+
+// GetStandingsParams parameters for querying challenge standings.
+// {challengeId, limit?=20, offset?=0}
+type GetStandingsParams struct {
+	ChallengeID string `json:"challengeId"`
+	Limit       int    `json:"limit,omitempty"`
+	Offset      int    `json:"offset,omitempty"`
+}
+
+// GetStandings queries challenge standings and waits for the server ack.
+// Response: {challengeId, metric, standings:[{identity,value,rank,cohort,platform}], yourRank}
+func (e *EnhancedFeatures) GetStandings(params GetStandingsParams) (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("challenge_standings_success", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "challenge_standings" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("challenge_standings", params)
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for challenge standings")
+	}
+}
+
+// GetAchievementsParams parameters for querying achievements.
+// {achievementId?}
+type GetAchievementsParams struct {
+	AchievementID string `json:"achievementId,omitempty"`
+}
+
+// GetAchievements queries achievement state and waits for the server ack.
+// Response: {achievements:[...]}
+func (e *EnhancedFeatures) GetAchievements(params GetAchievementsParams) (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("achievement_state", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "achievement_query" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("achievement_query", params)
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for achievements")
+	}
+}
+
+// SendChallengeInviteParams parameters for sending a challenge invite.
+// {toUserId, type?='match', payload?<=8KB, ttl?=300, channel?, inviteId?}
+type SendChallengeInviteParams struct {
+	ToUserID string      `json:"toUserId"`
+	Type     string      `json:"type,omitempty"`
+	Payload  interface{} `json:"payload,omitempty"`
+	TTL      int         `json:"ttl,omitempty"`
+	Channel  string      `json:"channel,omitempty"`
+	InviteID string      `json:"inviteId,omitempty"`
+}
+
+// SendChallengeInvite sends a challenge invite and waits for the server ack.
+// Response: {inviteId, toUserId, type, status:'pending', expiresAt}
+func (e *EnhancedFeatures) SendChallengeInvite(params SendChallengeInviteParams) (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("challenge_invite_success", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "challenge_invite" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("challenge_invite", params)
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for challenge invite")
+	}
+}
+
+// ReplyChallengeInviteParams parameters for replying to a challenge invite.
+// {inviteId, accept:bool, reason?}
+type ReplyChallengeInviteParams struct {
+	InviteID string `json:"inviteId"`
+	Accept   bool   `json:"accept"`
+	Reason   string `json:"reason,omitempty"`
+}
+
+// ReplyChallengeInvite replies to a challenge invite and waits for the server ack.
+// Response: {inviteId, accept, type, payload, channel}
+func (e *EnhancedFeatures) ReplyChallengeInvite(params ReplyChallengeInviteParams) (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("challenge_reply_success", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "challenge_reply" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("challenge_reply", params)
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for challenge reply")
+	}
+}
+
+// CancelChallengeInviteParams parameters for cancelling a challenge invite.
+// {inviteId}
+type CancelChallengeInviteParams struct {
+	InviteID string `json:"inviteId"`
+}
+
+// CancelChallengeInvite cancels a challenge invite and waits for the server ack.
+// Response: {inviteId}
+func (e *EnhancedFeatures) CancelChallengeInvite(params CancelChallengeInviteParams) (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("challenge_invite_cancel_success", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "challenge_invite_cancel" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("challenge_invite_cancel", params)
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for challenge invite cancel")
+	}
+}
+
+// GetChallengeInvites queries pending challenge invites and waits for the server ack.
+// Emits with an empty object. Response: {invites:[...]}
+func (e *EnhancedFeatures) GetChallengeInvites() (map[string]interface{}, error) {
+	if !e.client.IsConnected() {
+		return nil, fmt.Errorf("not connected to OddSockets")
+	}
+
+	result := make(chan map[string]interface{}, 1)
+	errChan := make(chan error, 1)
+
+	e.client.socket.Once("challenge_invites", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			result <- m
+		}
+	})
+
+	e.client.socket.Once("error", func(data interface{}) {
+		if m, ok := data.(map[string]interface{}); ok {
+			if event, ok := m["event"].(string); ok && event == "challenge_invites_query" {
+				errChan <- fmt.Errorf("%v", m["message"])
+			}
+		}
+	})
+
+	e.client.socket.Emit("challenge_invites_query", map[string]interface{}{})
+
+	select {
+	case res := <-result:
+		return res, nil
+	case err := <-errChan:
+		return nil, err
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for challenge invites")
+	}
+}

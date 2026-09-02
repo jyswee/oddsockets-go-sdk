@@ -17,6 +17,7 @@ COPY . .
 
 WORKDIR /app/demo
 RUN go build -o /usr/local/bin/demo . \
- && go build -o /usr/local/bin/enhanced ./enhanced
+ && go build -o /usr/local/bin/enhanced ./enhanced \
+ && go build -o /usr/local/bin/challenge ./challenge
 
 ENTRYPOINT ["/usr/local/bin/demo"]

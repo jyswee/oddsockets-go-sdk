@@ -649,6 +649,8 @@ var enhancedBroadcastEvents = []string{
 	"dm_created", "dm_received",
 	"notification", "notification_read", "all_notifications_read", "notifications_cleared",
 	"channel_created", "channel_updated", "user_invited", "user_joined_channel", "user_left_channel", "user_removed",
+	"challenge_progress", "leaderboard_rank_change", "challenge_complete", "achievement_unlock", "achievement_progress",
+	"challenge_invited", "challenge_reply_received", "challenge_invite_cancelled",
 }
 
 // scheduleReconnect schedules reconnection with exponential backoff
